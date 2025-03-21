@@ -1,0 +1,33 @@
+tara-assistant/
+├── app.py                    # Main Flask application
+├── config.py                 # Configuration settings
+├── database.py               # Database connection and models
+├── modules/                  # Application modules
+│   ├── __init__.py
+│   ├── coding.py             # Coding module functionality
+│   ├── testing.py            # Testing module functionality
+│   └── chat.py               # Chat module functionality
+├── static/                   # Static assets
+│   ├── css/
+│   │   ├── main.css          # Main stylesheet
+│   │   ├── coding.css        # Coding module styles
+│   │   ├── testing.css       # Testing module styles
+│   │   └── chat.css          # Chat module styles
+│   ├── js/
+│   │   ├── main.js           # Main JavaScript
+│   │   ├── coding.js         # Coding module scripts
+│   │   ├── testing.js        # Testing module scripts
+│   │   └── chat.js           # Chat module scripts
+│   └── images/
+│       ├── logo.svg          # TARA Assistant logo
+│       └── favicon.ico       # Favicon
+├── templates/                # HTML templates
+│   ├── base.html             # Base template with common elements
+│   ├── index.html            # Landing page
+│   ├── coding.html           # Coding module page
+│   ├── error.html            # Error Management
+│   ├── testing.html          # Testing module page
+│   └── chat.html             # Chat module page
+├── vercel.json               # Vercel deployment configuration
+├── requirements.txt          # Python dependencies
+└── README.md                 # Project documentation
