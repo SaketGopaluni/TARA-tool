@@ -1,0 +1,164 @@
+{% extends 'base.html' %}
+
+{% block title %}TARA Assistant - Home{% endblock %}
+
+{% block content %}
+<div class="py-10">
+    <header>
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h1 class="text-3xl font-bold leading-tight text-gray-900">
+                Welcome to TARA Assistant
+            </h1>
+        </div>
+    </header>
+    <main>
+        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            <div class="px-4 py-8 sm:px-0">
+                <div class="bg-white overflow-hidden shadow rounded-lg">
+                    <div class="px-4 py-5 sm:p-6">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">
+                            Threat Analysis and Risk Assessment for Automotive Systems
+                        </h2>
+                        <p class="text-lg text-gray-600 mb-8">
+                            TARA Assistant is a specialized tool designed to aid cybersecurity professionals and developers
+                            in performing Threat Analysis and Risk Assessment for automotive systems, with a focus on
+                            Electronic Control Units (ECUs).
+                        </p>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            <div class="bg-indigo-50 rounded-lg p-6 shadow-sm">
+                                <div class="flex items-center mb-4">
+                                    <div class="bg-indigo-500 rounded-full p-3">
+                                        <i class="fas fa-code text-white text-xl"></i>
+                                    </div>
+                                    <h3 class="text-xl font-semibold text-gray-800 ml-4">Coding Module</h3>
+                                </div>
+                                <p class="text-gray-600 mb-4">Generate, debug, and modify scripts for automotive security testing and analysis.</p>
+                                <ul class="text-gray-600 mb-6 space-y-2">
+                                    <li class="flex items-start">
+                                        <i class="fas fa-check-circle text-indigo-500 mt-1 mr-2"></i>
+                                        <span>Script generation based on requirements</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="fas fa-check-circle text-indigo-500 mt-1 mr-2"></i>
+                                        <span>Debugging with clear explanations</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="fas fa-check-circle text-indigo-500 mt-1 mr-2"></i>
+                                        <span>Version comparison and diffchecker</span>
+                                    </li>
+                                </ul>
+                                <a href="{{ url_for('coding') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                    Go to Coding Module
+                                    <i class="fas fa-arrow-right ml-2"></i>
+                                </a>
+                            </div>
+                            
+                            <div class="bg-green-50 rounded-lg p-6 shadow-sm">
+                                <div class="flex items-center mb-4">
+                                    <div class="bg-green-500 rounded-full p-3">
+                                        <i class="fas fa-vial text-white text-xl"></i>
+                                    </div>
+                                    <h3 class="text-xl font-semibold text-gray-800 ml-4">Testing Module</h3>
+                                </div>
+                                <p class="text-gray-600 mb-4">Create and execute comprehensive test cases for your security scripts.</p>
+                                <ul class="text-gray-600 mb-6 space-y-2">
+                                    <li class="flex items-start">
+                                        <i class="fas fa-check-circle text-green-500 mt-1 mr-2"></i>
+                                        <span>Unit test generation</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="fas fa-check-circle text-green-500 mt-1 mr-2"></i>
+                                        <span>Automated test execution</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="fas fa-check-circle text-green-500 mt-1 mr-2"></i>
+                                        <span>Test improvement suggestions</span>
+                                    </li>
+                                </ul>
+                                <a href="{{ url_for('testing') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                                    Go to Testing Module
+                                    <i class="fas fa-arrow-right ml-2"></i>
+                                </a>
+                            </div>
+                            
+                            <div class="bg-purple-50 rounded-lg p-6 shadow-sm">
+                                <div class="flex items-center mb-4">
+                                    <div class="bg-purple-500 rounded-full p-3">
+                                        <i class="fas fa-comment-alt text-white text-xl"></i>
+                                    </div>
+                                    <h3 class="text-xl font-semibold text-gray-800 ml-4">Chat Module</h3>
+                                </div>
+                                <p class="text-gray-600 mb-4">Get expert assistance on automotive cybersecurity concepts and threat modeling.</p>
+                                <ul class="text-gray-600 mb-6 space-y-2">
+                                    <li class="flex items-start">
+                                        <i class="fas fa-check-circle text-purple-500 mt-1 mr-2"></i>
+                                        <span>ECU explanations and details</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="fas fa-check-circle text-purple-500 mt-1 mr-2"></i>
+                                        <span>CIA-based damage scenarios</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="fas fa-check-circle text-purple-500 mt-1 mr-2"></i>
+                                        <span>STRIDE-based threat modeling</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="fas fa-check-circle text-purple-500 mt-1 mr-2"></i>
+                                        <span>Attack pattern generation</span>
+                                    </li>
+                                </ul>
+                                <a href="{{ url_for('chat') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500">
+                                    Go to Chat Module
+                                    <i class="fas fa-arrow-right ml-2"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Additional info section -->
+                <div class="mt-8 bg-white overflow-hidden shadow rounded-lg">
+                    <div class="px-4 py-5 sm:p-6">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">About Automotive Cybersecurity</h2>
+                        <p class="text-gray-600 mb-4">
+                            Modern vehicles contain dozens of Electronic Control Units (ECUs) that control everything from engine 
+                            management to infotainment systems. As vehicles become more connected, they also become more vulnerable
+                            to cyber attacks.
+                        </p>
+                        <p class="text-gray-600 mb-4">
+                            Threat Analysis and Risk Assessment (TARA) is a critical process in automotive cybersecurity that helps
+                            identify, evaluate, and mitigate potential security risks. This process is mandated by industry standards
+                            such as ISO 21434 and SAE J3061.
+                        </p>
+                        <div class="flex flex-col md:flex-row justify-between mt-6">
+                            <div class="mb-4 md:mb-0 md:mr-4 p-4 bg-gray-50 rounded-lg flex-1">
+                                <h3 class="text-lg font-medium text-gray-900 mb-2">Key ECU Types</h3>
+                                <ul class="list-disc pl-5 text-gray-600">
+                                    <li>Engine Control Module (ECM)</li>
+                                    <li>Transmission Control Module (TCM)</li>
+                                    <li>Body Control Module (BCM)</li>
+                                    <li>Brake Control Module (BCM)</li>
+                                    <li>Telematics Control Unit (TCU)</li>
+                                    <li>Infotainment System</li>
+                                </ul>
+                            </div>
+                            <div class="p-4 bg-gray-50 rounded-lg flex-1">
+                                <h3 class="text-lg font-medium text-gray-900 mb-2">Common Attack Vectors</h3>
+                                <ul class="list-disc pl-5 text-gray-600">
+                                    <li>CAN bus vulnerabilities</li>
+                                    <li>Wireless interfaces (Bluetooth, Wi-Fi)</li>
+                                    <li>Cellular connections</li>
+                                    <li>OBD-II port access</li>
+                                    <li>Infotainment system exploits</li>
+                                    <li>Supply chain attacks</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}
