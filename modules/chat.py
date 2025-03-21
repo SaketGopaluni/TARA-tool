@@ -5,7 +5,7 @@ from database import db, ChatSession, ChatMessage
 class ChatModule:
     def __init__(self, api_key, model):
         """Initialize the chat module with API credentials."""
-        self.client = OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=api_key, base_url="https://api.openai.com/v1")
         self.model = model
         
         # Define prompt templates for different types of queries
