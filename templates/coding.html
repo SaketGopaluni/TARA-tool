@@ -11,6 +11,52 @@
         overflow-wrap: normal;
         overflow-x: scroll;
     }
+    
+    .tabs-container {
+        border-bottom: 1px solid #e5e7eb;
+        margin-bottom: 1rem;
+    }
+    
+    .tab-button {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        margin-right: 0.5rem;
+        border-bottom: 2px solid transparent;
+        color: #6b7280;
+        cursor: pointer;
+    }
+    
+    .tab-button.active {
+        border-bottom-color: #4f46e5;
+        color: #4f46e5;
+    }
+    
+    .tab-content {
+        display: none;
+    }
+    
+    .tab-content.active {
+        display: block;
+    }
+    
+    .diff-viewer {
+        background-color: #f8fafc;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        font-family: monospace;
+        white-space: pre-wrap;
+        overflow-x: auto;
+    }
+    
+    .diff-line-added {
+        background-color: #d1fae5;
+        color: #065f46;
+    }
+    
+    .diff-line-removed {
+        background-color: #fee2e2;
+        color: #b91c1c;
+    }
 </style>
 {% endblock %}
 
@@ -29,8 +75,16 @@
     
     <main class="mt-6">
         <div class="px-4 sm:px-6 lg:px-8">
+            <!-- Tabs -->
+            <div class="tabs-container">
+                <button class="tab-button active" data-tab="generate">Generate Script</button>
+                <button class="tab-button" data-tab="debug">Debug Script</button>
+                <button class="tab-button" data-tab="modify">Modify Script</button>
+                <button class="tab-button" data-tab="diffcheck">Diff Checker</button>
+            </div>
+            
             <!-- Generate Script Tab -->
-            <div id="content-generate" class="bg-white shadow sm:rounded-lg p-6">
+            <div id="generate-tab" class="tab-content active bg-white shadow sm:rounded-lg p-6">
                 <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Generate a New Script</h3>
                 <div class="mt-2 max-w-xl text-sm text-gray-500 mb-4">
                     <p>Describe the script you need, including its purpose, functionality, and any specific requirements.</p>
@@ -89,6 +143,230 @@
                 <div id="generate-error" class="hidden mt-4 text-red-600 bg-red-50 p-4 rounded-md">
                 </div>
             </div>
+            
+            <!-- Debug Script Tab -->
+            <div id="debug-tab" class="tab-content bg-white shadow sm:rounded-lg p-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Debug a Script</h3>
+                <div class="mt-2 max-w-xl text-sm text-gray-500 mb-4">
+                    <p>Upload or paste a script with potential issues, and get it debugged with explanations of the fixes.</p>
+                </div>
+                <form id="debug-form" class="mt-5">
+                    <div class="mb-4">
+                        <label for="debug-script-upload" class="block text-sm font-medium text-gray-700">Upload Script (Optional)</label>
+                        <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                            <div class="space-y-1 text-center">
+                                <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                                    <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4h-8m-12 0H8m8 0v-8m12 8v-8m12 0h-8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                                <div class="flex text-sm text-gray-600">
+                                    <label for="debug-file" class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
+                                        <span>Upload a file</span>
+                                        <input id="debug-file" name="debug-file" type="file" class="sr-only" accept=".py,.js,.c,.cpp">
+                                    </label>
+                                    <p class="pl-1">or drag and drop</p>
+                                </div>
+                                <p class="text-xs text-gray-500">Python, JavaScript, C, or C++ files up to 10MB</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <label for="debug-content" class="block text-sm font-medium text-gray-700">Script to Debug</label>
+                        <textarea id="debug-content" name="debug_content" rows="10" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono code-textarea" placeholder="Paste your script here or upload a file above"></textarea>
+                    </div>
+                    <div class="mt-5">
+                        <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Debug Script
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="debug-result" class="mt-8 hidden">
+                    <div class="border-t border-gray-200 pt-4">
+                        <h4 class="text-lg font-medium text-gray-900 mb-4">Debugging Results</h4>
+                        
+                        <div class="mb-6">
+                            <h5 class="text-md font-medium text-gray-700 mb-2">Explanation</h5>
+                            <div id="debug-explanation" class="bg-gray-50 rounded-md p-4 text-sm text-gray-700"></div>
+                        </div>
+                        
+                        <div class="mb-6">
+                            <h5 class="text-md font-medium text-gray-700 mb-2">Changes</h5>
+                            <div id="debug-diff" class="bg-gray-50 rounded-md p-4 text-sm overflow-x-auto"></div>
+                        </div>
+                        
+                        <div>
+                            <div class="flex justify-between items-center mb-2">
+                                <h5 class="text-md font-medium text-gray-700">Fixed Script</h5>
+                                <div>
+                                    <button id="copy-debug-result" class="text-sm text-indigo-600 hover:text-indigo-900">
+                                        <i class="far fa-copy mr-1"></i> Copy
+                                    </button>
+                                    <button id="download-debug-result" class="ml-2 text-sm text-indigo-600 hover:text-indigo-900">
+                                        <i class="fas fa-download mr-1"></i> Download
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="relative">
+                                <pre class="bg-gray-800 rounded-lg overflow-x-auto"><code id="debug-code" class="language-python text-white p-4"></code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Loading indicator -->
+                <div id="debug-loading" class="hidden mt-4 flex items-center justify-center">
+                    <svg class="animate-spin h-5 w-5 text-indigo-500 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Debugging script...</span>
+                </div>
+                
+                <!-- Error message -->
+                <div id="debug-error" class="hidden mt-4 text-red-600 bg-red-50 p-4 rounded-md">
+                </div>
+            </div>
+            
+            <!-- Modify Script Tab -->
+            <div id="modify-tab" class="tab-content bg-white shadow sm:rounded-lg p-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Modify a Script</h3>
+                <div class="mt-2 max-w-xl text-sm text-gray-500 mb-4">
+                    <p>Upload or paste a script and describe the modifications you need.</p>
+                </div>
+                <form id="modify-form" class="mt-5">
+                    <div class="mb-4">
+                        <label for="modify-script-upload" class="block text-sm font-medium text-gray-700">Upload Script (Optional)</label>
+                        <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                            <div class="space-y-1 text-center">
+                                <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                                    <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4h-8m-12 0H8m8 0v-8m12 8v-8m12 0h-8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                                <div class="flex text-sm text-gray-600">
+                                    <label for="modify-file" class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
+                                        <span>Upload a file</span>
+                                        <input id="modify-file" name="modify-file" type="file" class="sr-only" accept=".py,.js,.c,.cpp">
+                                    </label>
+                                    <p class="pl-1">or drag and drop</p>
+                                </div>
+                                <p class="text-xs text-gray-500">Python, JavaScript, C, or C++ files up to 10MB</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <label for="modify-content" class="block text-sm font-medium text-gray-700">Script to Modify</label>
+                        <textarea id="modify-content" name="modify_content" rows="10" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono code-textarea" placeholder="Paste your script here or upload a file above"></textarea>
+                    </div>
+                    <div class="mb-4">
+                        <label for="modification-request" class="block text-sm font-medium text-gray-700">Modification Request</label>
+                        <textarea id="modification-request" name="modification_request" rows="4" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Describe the modifications you need (e.g., 'Add error handling for network failures' or 'Implement a new feature to filter by message ID')"></textarea>
+                    </div>
+                    <div class="mt-5">
+                        <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Modify Script
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="modify-result" class="mt-8 hidden">
+                    <div class="border-t border-gray-200 pt-4">
+                        <h4 class="text-lg font-medium text-gray-900 mb-4">Modification Results</h4>
+                        
+                        <div class="mb-6">
+                            <h5 class="text-md font-medium text-gray-700 mb-2">Explanation of Changes</h5>
+                            <div id="modify-explanation" class="bg-gray-50 rounded-md p-4 text-sm text-gray-700"></div>
+                        </div>
+                        
+                        <div class="mb-6">
+                            <h5 class="text-md font-medium text-gray-700 mb-2">Changes</h5>
+                            <div id="modify-diff" class="bg-gray-50 rounded-md p-4 text-sm overflow-x-auto"></div>
+                        </div>
+                        
+                        <div>
+                            <div class="flex justify-between items-center mb-2">
+                                <h5 class="text-md font-medium text-gray-700">Modified Script</h5>
+                                <div>
+                                    <button id="copy-modify-result" class="text-sm text-indigo-600 hover:text-indigo-900">
+                                        <i class="far fa-copy mr-1"></i> Copy
+                                    </button>
+                                    <button id="download-modify-result" class="ml-2 text-sm text-indigo-600 hover:text-indigo-900">
+                                        <i class="fas fa-download mr-1"></i> Download
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="relative">
+                                <pre class="bg-gray-800 rounded-lg overflow-x-auto"><code id="modify-code" class="language-python text-white p-4"></code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Loading indicator -->
+                <div id="modify-loading" class="hidden mt-4 flex items-center justify-center">
+                    <svg class="animate-spin h-5 w-5 text-indigo-500 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Modifying script...</span>
+                </div>
+                
+                <!-- Error message -->
+                <div id="modify-error" class="hidden mt-4 text-red-600 bg-red-50 p-4 rounded-md">
+                </div>
+            </div>
+            
+            <!-- Diff Checker Tab -->
+            <div id="diffcheck-tab" class="tab-content bg-white shadow sm:rounded-lg p-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Script Diff Checker</h3>
+                <div class="mt-2 max-w-xl text-sm text-gray-500 mb-4">
+                    <p>Compare two versions of a script to see what has changed.</p>
+                </div>
+                <form id="diffcheck-form" class="mt-5">
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                            <label for="original-content" class="block text-sm font-medium text-gray-700">Original Script</label>
+                            <textarea id="original-content" name="original_content" rows="10" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono code-textarea" placeholder="Paste the original version of the script"></textarea>
+                        </div>
+                        <div>
+                            <label for="new-content" class="block text-sm font-medium text-gray-700">New Script</label>
+                            <textarea id="new-content" name="new_content" rows="10" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono code-textarea" placeholder="Paste the new version of the script"></textarea>
+                        </div>
+                    </div>
+                    <div class="mt-5">
+                        <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Compare Scripts
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="diffcheck-result" class="mt-8 hidden">
+                    <div class="border-t border-gray-200 pt-4">
+                        <h4 class="text-lg font-medium text-gray-900 mb-4">Comparison Results</h4>
+                        
+                        <div class="mb-6">
+                            <h5 class="text-md font-medium text-gray-700 mb-2">Explanation of Changes</h5>
+                            <div id="diffcheck-explanation" class="bg-gray-50 rounded-md p-4 text-sm text-gray-700"></div>
+                        </div>
+                        
+                        <div>
+                            <h5 class="text-md font-medium text-gray-700 mb-2">Differences</h5>
+                            <div id="diffcheck-diff" class="diff-viewer"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Loading indicator -->
+                <div id="diffcheck-loading" class="hidden mt-4 flex items-center justify-center">
+                    <svg class="animate-spin h-5 w-5 text-indigo-500 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Comparing scripts...</span>
+                </div>
+                
+                <!-- Error message -->
+                <div id="diffcheck-error" class="hidden mt-4 text-red-600 bg-red-50 p-4 rounded-md">
+                </div>
+            </div>
         </div>
     </main>
 </div>
@@ -97,41 +375,116 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Elements for Generate Script
+    // Tab switching functionality
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+    
+    tabButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            // Remove 'active' class from all buttons and tabs
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabContents.forEach(tab => tab.classList.remove('active'));
+            
+            // Add 'active' class to the clicked button
+            this.classList.add('active');
+            
+            // Show the corresponding tab content
+            const tabId = this.getAttribute('data-tab') + '-tab';
+            document.getElementById(tabId).classList.add('active');
+        });
+    });
+    
+    // File upload functionality for Debug tab
+    const debugFileInput = document.getElementById('debug-file');
+    const debugContent = document.getElementById('debug-content');
+    
+    if (debugFileInput && debugContent) {
+        debugFileInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    debugContent.value = e.target.result;
+                };
+                reader.readAsText(file);
+            }
+        });
+    }
+    
+    // File upload functionality for Modify tab
+    const modifyFileInput = document.getElementById('modify-file');
+    const modifyContent = document.getElementById('modify-content');
+    
+    if (modifyFileInput && modifyContent) {
+        modifyFileInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    modifyContent.value = e.target.result;
+                };
+                reader.readAsText(file);
+            }
+        });
+    }
+    
+    // Drag and drop for debug
+    setupDragAndDrop('debug');
+    
+    // Drag and drop for modify
+    setupDragAndDrop('modify');
+    
+    // Generate Script Form
     const generateForm = document.getElementById('generate-form');
     const generateLoading = document.getElementById('generate-loading');
     const generateError = document.getElementById('generate-error');
     const generateResult = document.getElementById('generate-result');
-    const generateCode = document.getElementById('generate-code');
-    const generateTitle = document.getElementById('generate-title');
-    const copyGenerateButton = document.getElementById('copy-generate-result');
-    const downloadGenerateButton = document.getElementById('download-generate-result');
     
-    // Generate Script Form Submit
     if (generateForm) {
         generateForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            // Hide previous results and errors
-            generateResult.classList.add('hidden');
-            generateError.classList.add('hidden');
-            
-            // Show loading state
-            generateLoading.classList.remove('hidden');
-            
-            // Get form data
             const prompt = document.getElementById('prompt').value;
             const language = document.getElementById('language').value;
             
+            if (!prompt) {
+                generateError.textContent = 'Please provide script requirements';
+                generateError.classList.remove('hidden');
+                return;
+            }
+            
+            // Hide previous results/errors and show loading
+            generateResult.classList.add('hidden');
+            generateError.classList.add('hidden');
+            generateLoading.classList.remove('hidden');
+            
             try {
-                const result = await apiRequest('/api/coding/generate', 'POST', { prompt, language });
+                // Use fetch directly instead of apiRequest helper to better control timeouts
+                const response = await fetch('/api/coding/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({ prompt, language }),
+                    credentials: 'same-origin'
+                });
+                
+                // Check if response is ok
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                }
+                
+                // Parse JSON
+                const result = await response.json();
                 
                 // Hide loading
                 generateLoading.classList.add('hidden');
                 
                 if (result.success) {
                     // Update the UI with the generated script
-                    generateTitle.textContent = result.script.title;
+                    document.getElementById('generate-title').textContent = result.script.title;
+                    const generateCode = document.getElementById('generate-code');
                     generateCode.textContent = result.script.content;
                     generateCode.className = `language-${language} text-white p-4`;
                     
@@ -150,54 +503,339 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     generateError.textContent = result.message || 'Failed to generate script';
                     generateError.classList.remove('hidden');
-                    showToast(result.message || 'Failed to generate script', 'error');
                 }
             } catch (error) {
-                // Hide loading
+                console.error('Error:', error);
                 generateLoading.classList.add('hidden');
-                
-                // Show error
                 generateError.textContent = `Error: ${error.message}`;
                 generateError.classList.remove('hidden');
-                showToast(`Error: ${error.message}`, 'error');
             }
         });
     }
     
-    // Copy button event listener
-    if (copyGenerateButton) {
-        copyGenerateButton.addEventListener('click', function() {
-            const codeToCopy = generateCode.textContent;
-            copyToClipboard(codeToCopy);
+    // Debug Script Form
+    const debugForm = document.getElementById('debug-form');
+    const debugLoading = document.getElementById('debug-loading');
+    const debugError = document.getElementById('debug-error');
+    const debugResult = document.getElementById('debug-result');
+    
+    if (debugForm) {
+        debugForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const scriptContent = document.getElementById('debug-content').value;
+            
+            if (!scriptContent) {
+                debugError.textContent = 'Please provide a script to debug';
+                debugError.classList.remove('hidden');
+                return;
+            }
+            
+            // Hide previous results/errors and show loading
+            debugResult.classList.add('hidden');
+            debugError.classList.add('hidden');
+            debugLoading.classList.remove('hidden');
+            
+            try {
+                const response = await fetch('/api/coding/debug', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({ 
+                        script_content: scriptContent 
+                    }),
+                    credentials: 'same-origin'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                
+                // Hide loading
+                debugLoading.classList.add('hidden');
+                
+                if (result.success) {
+                    // Update the UI with the debug results
+                    document.getElementById('debug-explanation').innerHTML = result.explanation;
+                    document.getElementById('debug-diff').innerHTML = result.diff_html;
+                    
+                    const debugCode = document.getElementById('debug-code');
+                    debugCode.textContent = result.fixed_script;
+                    
+                    // Highlight the code
+                    if (typeof hljs !== 'undefined') {
+                        hljs.highlightElement(debugCode);
+                    }
+                    
+                    // Show the result
+                    debugResult.classList.remove('hidden');
+                    
+                    // Scroll to the result
+                    debugResult.scrollIntoView({ behavior: 'smooth' });
+                    
+                    showToast('Script debugged successfully!', 'success');
+                } else {
+                    debugError.textContent = result.message || 'Failed to debug script';
+                    debugError.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                debugLoading.classList.add('hidden');
+                debugError.textContent = `Error: ${error.message}`;
+                debugError.classList.remove('hidden');
+            }
         });
     }
     
-    // Download button event listener
-    if (downloadGenerateButton) {
-        downloadGenerateButton.addEventListener('click', function() {
-            const language = document.getElementById('language').value;
-            const extension = language === 'python' ? '.py' : 
-                              language === 'javascript' ? '.js' : 
-                              language === 'c' ? '.c' : '.cpp';
+    // Modify Script Form
+    const modifyForm = document.getElementById('modify-form');
+    const modifyLoading = document.getElementById('modify-loading');
+    const modifyError = document.getElementById('modify-error');
+    const modifyResult = document.getElementById('modify-result');
+    
+    if (modifyForm) {
+        modifyForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
             
-            const title = generateTitle.textContent.trim() || 'generated_script';
-            const filename = title.toLowerCase().replace(/\s+/g, '_') + extension;
+            const scriptContent = document.getElementById('modify-content').value;
+            const modificationRequest = document.getElementById('modification-request').value;
             
-            const codeToCopy = generateCode.textContent;
+            if (!scriptContent) {
+                modifyError.textContent = 'Please provide a script to modify';
+                modifyError.classList.remove('hidden');
+                return;
+            }
             
-            // Create a blob and download link
-            const blob = new Blob([codeToCopy], {type: 'text/plain'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            if (!modificationRequest) {
+                modifyError.textContent = 'Please provide modification instructions';
+                modifyError.classList.remove('hidden');
+                return;
+            }
             
-            showToast(`Downloaded ${filename}`, 'success');
+            // Hide previous results/errors and show loading
+            modifyResult.classList.add('hidden');
+            modifyError.classList.add('hidden');
+            modifyLoading.classList.remove('hidden');
+            
+            try {
+                const response = await fetch('/api/coding/modify', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({ 
+                        script_content: scriptContent,
+                        modification_request: modificationRequest
+                    }),
+                    credentials: 'same-origin'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                
+                // Hide loading
+                modifyLoading.classList.add('hidden');
+                
+                if (result.success) {
+                    // Update the UI with the modification results
+                    document.getElementById('modify-explanation').innerHTML = result.explanation;
+                    document.getElementById('modify-diff').innerHTML = result.diff_html;
+                    
+                    const modifyCode = document.getElementById('modify-code');
+                    modifyCode.textContent = result.modified_script;
+                    
+                    // Highlight the code
+                    if (typeof hljs !== 'undefined') {
+                        hljs.highlightElement(modifyCode);
+                    }
+                    
+                    // Show the result
+                    modifyResult.classList.remove('hidden');
+                    
+                    // Scroll to the result
+                    modifyResult.scrollIntoView({ behavior: 'smooth' });
+                    
+                    showToast('Script modified successfully!', 'success');
+                } else {
+                    modifyError.textContent = result.message || 'Failed to modify script';
+                    modifyError.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                modifyLoading.classList.add('hidden');
+                modifyError.textContent = `Error: ${error.message}`;
+                modifyError.classList.remove('hidden');
+            }
         });
+    }
+    
+    // Diff Checker Form
+    const diffcheckForm = document.getElementById('diffcheck-form');
+    const diffcheckLoading = document.getElementById('diffcheck-loading');
+    const diffcheckError = document.getElementById('diffcheck-error');
+    const diffcheckResult = document.getElementById('diffcheck-result');
+    
+    if (diffcheckForm) {
+        diffcheckForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const originalContent = document.getElementById('original-content').value;
+            const newContent = document.getElementById('new-content').value;
+            
+            if (!originalContent || !newContent) {
+                diffcheckError.textContent = 'Please provide both original and new script versions';
+                diffcheckError.classList.remove('hidden');
+                return;
+            }
+            
+            // Hide previous results/errors and show loading
+            diffcheckResult.classList.add('hidden');
+            diffcheckError.classList.add('hidden');
+            diffcheckLoading.classList.remove('hidden');
+            
+            try {
+                const response = await fetch('/api/coding/diffcheck', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({ 
+                        original_content: originalContent,
+                        new_content: newContent
+                    }),
+                    credentials: 'same-origin'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                
+                // Hide loading
+                diffcheckLoading.classList.add('hidden');
+                
+                if (result.success) {
+                    // Update the UI with the diff results
+                    document.getElementById('diffcheck-explanation').innerHTML = result.explanation;
+                    document.getElementById('diffcheck-diff').innerHTML = result.diff_html;
+                    
+                    // Show the result
+                    diffcheckResult.classList.remove('hidden');
+                    
+                    // Scroll to the result
+                    diffcheckResult.scrollIntoView({ behavior: 'smooth' });
+                    
+                    showToast('Scripts compared successfully!', 'success');
+                } else {
+                    diffcheckError.textContent = result.message || 'Failed to compare scripts';
+                    diffcheckError.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                diffcheckLoading.classList.add('hidden');
+                diffcheckError.textContent = `Error: ${error.message}`;
+                diffcheckError.classList.remove('hidden');
+            }
+        });
+    }
+    
+    // Copy and download buttons
+    setupCopyAndDownload('generate');
+    setupCopyAndDownload('debug');
+    setupCopyAndDownload('modify');
+    
+    // Helper functions
+    function setupDragAndDrop(prefix) {
+        const dropZone = document.querySelector(`label[for="${prefix}-file"]`).closest('.border-dashed');
+        const contentArea = document.getElementById(`${prefix}-content`);
+        
+        if (!dropZone || !contentArea) return;
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+        
+        function highlight() {
+            dropZone.classList.add('border-indigo-300', 'bg-indigo-50');
+        }
+        
+        function unhighlight() {
+            dropZone.classList.remove('border-indigo-300', 'bg-indigo-50');
+        }
+        
+        dropZone.addEventListener('drop', handleDrop, false);
+        
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const file = dt.files[0];
+            
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    contentArea.value = e.target.result;
+                };
+                reader.readAsText(file);
+            }
+        }
+    }
+    
+    function setupCopyAndDownload(prefix) {
+        const copyButton = document.getElementById(`copy-${prefix}-result`);
+        const downloadButton = document.getElementById(`download-${prefix}-result`);
+        const codeElement = document.getElementById(`${prefix}-code`);
+        
+        if (copyButton && codeElement) {
+            copyButton.addEventListener('click', function() {
+                copyToClipboard(codeElement.textContent);
+            });
+        }
+        
+        if (downloadButton && codeElement) {
+            downloadButton.addEventListener('click', function() {
+                const language = document.getElementById('language')?.value || 'python';
+                const extension = language === 'python' ? '.py' : 
+                                language === 'javascript' ? '.js' : 
+                                language === 'c' ? '.c' : '.cpp';
+                
+                const filename = `${prefix}_script${extension}`;
+                
+                // Create a blob and download link
+                const blob = new Blob([codeElement.textContent], {type: 'text/plain'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showToast(`Downloaded ${filename}`, 'success');
+            });
+        }
     }
 });
 </script>
