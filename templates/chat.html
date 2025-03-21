@@ -66,6 +66,47 @@
     .send-button {
         margin-left: 0.5rem;
     }
+    
+    /* SFOP Rating styles */
+    .sfop-ratings {
+        margin-top: 0.5rem;
+        padding-top: 0.5rem;
+        border-top: 1px solid #e5e7eb;
+    }
+    
+    .rating-badge {
+        display: inline-block;
+        padding: 0.125rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-right: 0.25rem;
+    }
+    
+    .rating-0 {
+        background-color: #e5e7eb;
+        color: #374151;
+    }
+    
+    .rating-1 {
+        background-color: #d1fae5;
+        color: #065f46;
+    }
+    
+    .rating-2 {
+        background-color: #fef3c7;
+        color: #92400e;
+    }
+    
+    .rating-3 {
+        background-color: #fee2e2;
+        color: #b91c1c;
+    }
+    
+    .rating-4 {
+        background-color: #dc2626;
+        color: #ffffff;
+    }
 </style>
 {% endblock %}
 
@@ -164,10 +205,22 @@ document.addEventListener('DOMContentLoaded', function() {
         chatMessages.scrollTop = chatMessages.scrollHeight;
         
         try {
+            // Determine if this is a damage scenario request
+            const isDamageScenario = message.toLowerCase().includes('damage scenario') || 
+                                 message.toLowerCase().includes('cia');
+            
             // Send message to server
-            const response = await apiRequest('/api/chat/send', 'POST', {
-                message: message,
-                query_type: 'general'
+            const response = await fetch('/api/chat/send', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    message: message,
+                    query_type: isDamageScenario ? 'damage_scenario' : 'general'
+                }),
+                credentials: 'same-origin'
             });
             
             // Remove loading indicator
@@ -176,11 +229,42 @@ document.addEventListener('DOMContentLoaded', function() {
                 chatMessages.removeChild(loadingIndicator);
             }
             
-            if (response.success) {
-                // Add assistant response to chat
-                addMessage('assistant', response.response);
+            // Check if response was successful at the HTTP level
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Server returned ${response.status}: ${errorText}`);
+            }
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                // Add assistant response to chat with special formatting for SFOP ratings
+                let content = result.response;
+                
+                // Format the SFOP ratings if they exist
+                if (content.includes('## SFOP Ratings')) {
+                    content = content.replace('## SFOP Ratings', 
+                        '<div class="mt-3 mb-2 font-bold text-indigo-800">SFOP Impact Ratings:</div>');
+                    
+                    // Format the ratings with color-coded badges
+                    content = content.replace(/- (Safety|Financial|Operational|Privacy) Impact: \[(\d)\] -/g, 
+                        function(match, type, rating) {
+                            const ratingLabels = {
+                                '0': 'None',
+                                '1': 'Low', 
+                                '2': 'Medium',
+                                '3': 'High',
+                                '4': 'Critical'
+                            };
+                            return `<div class="flex items-center my-1"><span class="font-semibold mr-2">${type}:</span> <span class="rating-badge rating-${rating}">${rating} - ${ratingLabels[rating]}</span> -`;
+                        });
+                }
+                
+                addMessage('assistant', content);
             } else {
-                showToast(response.message || 'Failed to send message', 'error');
+                showToast(result.message || 'Failed to send message', 'error');
+                // Add an error message to the chat
+                addMessage('assistant', '<div class="text-red-500">Sorry, I encountered an error processing your request. Please try again with a simpler query.</div>');
             }
         } catch (error) {
             // Remove loading indicator
@@ -190,6 +274,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             console.error('Error sending message:', error);
+            
+            // Add error message to chat
+            addMessage('assistant', `<div class="text-red-600">Sorry, I encountered an error: ${error.message}</div>`);
+            
             showToast(`Error: ${error.message}`, 'error');
         }
     }
@@ -220,14 +308,27 @@ document.addEventListener('DOMContentLoaded', function() {
     // Function to load chat history
     async function loadChatHistory() {
         try {
-            const response = await apiRequest('/api/chat/history', 'GET');
+            const response = await fetch('/api/chat/history', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                credentials: 'same-origin'
+            });
             
-            if (response.success && response.messages && response.messages.length > 0) {
+            if (!response.ok) {
+                throw new Error(`Failed to load chat history: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            
+            if (result.success && result.messages && result.messages.length > 0) {
                 // Clear chat
                 chatMessages.innerHTML = '';
                 
                 // Add all messages
-                response.messages.forEach(message => {
+                result.messages.forEach(message => {
                     addMessage(message.role, message.content);
                 });
                 
@@ -236,15 +337,30 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } catch (error) {
             console.error('Error loading chat history:', error);
+            // Show a toast but don't disrupt the UI
+            showToast('Could not load chat history', 'error');
         }
     }
     
     // Function to clear chat
     async function clearChat() {
         try {
-            const response = await apiRequest('/api/chat/clear', 'POST');
+            const response = await fetch('/api/chat/clear', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                credentials: 'same-origin'
+            });
             
-            if (response.success) {
+            if (!response.ok) {
+                throw new Error(`Failed to clear chat: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            
+            if (result.success) {
                 // Clear chat UI
                 chatMessages.innerHTML = '';
                 
@@ -253,7 +369,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 showToast('Chat cleared successfully', 'success');
             } else {
-                showToast(response.message || 'Failed to clear chat', 'error');
+                showToast(result.message || 'Failed to clear chat', 'error');
             }
         } catch (error) {
             console.error('Error clearing chat:', error);
