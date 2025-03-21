@@ -3,7 +3,15 @@
 {% block title %}TARA Assistant - Testing Module{% endblock %}
 
 {% block styles %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/testing.css') }}">
+<style>
+    .code-textarea {
+        font-family: monospace;
+        min-height: 200px;
+        white-space: pre;
+        overflow-wrap: normal;
+        overflow-x: scroll;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -14,226 +22,81 @@
                 Testing Module
             </h1>
             <p class="mt-2 text-sm text-gray-700">
-                Create and execute test cases for your automotive cybersecurity scripts
+                Create test cases for your automotive cybersecurity scripts
             </p>
         </div>
     </header>
     
     <main class="mt-6">
         <div class="px-4 sm:px-6 lg:px-8">
-            <!-- Tabs -->
-            <div class="mb-6">
-                <div class="sm:hidden">
-                    <label for="tabs" class="sr-only">Select a tab</label>
-                    <select id="tabs" name="tabs" class="block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500">
-                        <option value="generate">Generate Test Case</option>
-                        <option value="execute">Execute Test</option>
-                        <option value="improve">Improve Test Case</option>
-                    </select>
-                </div>
-                <div class="hidden sm:block">
-                    <div class="border-b border-gray-200">
-                        <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-                            <a href="#" id="tab-generate-test" class="tab-button border-green-500 text-green-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" aria-current="page">
+            <!-- Generate Test Case Tab -->
+            <div id="content-generate-test" class="bg-white shadow sm:rounded-lg">
+                <div class="px-4 py-5 sm:p-6">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">Generate a Test Case</h3>
+                    <div class="mt-2 max-w-xl text-sm text-gray-500 mb-4">
+                        <p>Upload your script and specify testing requirements to generate comprehensive test cases.</p>
+                    </div>
+                    <form id="generate-test-form" class="mt-5">
+                        <div class="mb-4">
+                            <label for="test-script-upload" class="block text-sm font-medium text-gray-700">Upload Script</label>
+                            <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                                <div class="space-y-1 text-center">
+                                    <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4h-8m-12 0H8m8 0v-8m12 8v-8m12 0h-8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                    </svg>
+                                    <div class="flex text-sm text-gray-600">
+                                        <label for="script-file" class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
+                                            <span>Upload a file</span>
+                                            <input id="script-file" name="script-file" type="file" class="sr-only" accept=".py,.js,.c,.cpp">
+                                        </label>
+                                        <p class="pl-1">or drag and drop</p>
+                                    </div>
+                                    <p class="text-xs text-gray-500">Python, JavaScript, C, or C++ files up to 10MB</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <label for="test-script-content" class="block text-sm font-medium text-gray-700">Script Content</label>
+                            <textarea id="test-script-content" name="script_content" rows="8" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono code-textarea" placeholder="Paste your script here or upload a file above"></textarea>
+                        </div>
+                        <div>
+                            <label for="test-requirements" class="block text-sm font-medium text-gray-700">Test Requirements</label>
+                            <textarea id="test-requirements" name="test_requirements" rows="4" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Describe what you want to test (e.g., 'Test the CAN message filtering function with various input types and edge cases')"></textarea>
+                        </div>
+                        <div class="mt-5">
+                            <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
                                 Generate Test Case
-                            </a>
-                            <a href="#" id="tab-execute-test" class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                                Execute Test
-                            </a>
-                            <a href="#" id="tab-improve-test" class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                                Improve Test Case
-                            </a>
-                        </nav>
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <div id="generate-test-loading" class="hidden mt-4 flex items-center justify-center">
+                        <svg class="animate-spin h-5 w-5 text-green-500 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Generating test case...</span>
                     </div>
-                </div>
-            </div>
-            
-            <!-- Tab contents -->
-            <div class="tab-content">
-                <!-- Generate Test Case Tab -->
-                <div id="content-generate-test" class="tab-pane active">
-                    <div class="bg-white shadow sm:rounded-lg">
-                        <div class="px-4 py-5 sm:p-6">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900">Generate a Test Case</h3>
-                            <div class="mt-2 max-w-xl text-sm text-gray-500">
-                                <p>Create comprehensive test cases for your scripts based on specific testing requirements.</p>
-                            </div>
-                            <form id="generate-test-form" class="mt-5">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <div class="mb-4">
-                                    <label for="test-select-script" class="block text-sm font-medium text-gray-700">Select Script to Test</label>
-                                    <select id="test-select-script" name="script_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
-                                        <option value="">-- Select a script --</option>
-                                        {% for script in scripts %}
-                                        <option value="{{ script.id }}">{{ script.title }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="mb-4">
-                                    <label for="test-script-content" class="block text-sm font-medium text-gray-700">Script Content</label>
-                                    <textarea id="test-script-content" name="script_content" rows="8" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono" placeholder="Script content will appear here" readonly></textarea>
-                                </div>
+                    
+                    <div id="generate-test-error" class="hidden mt-4 text-red-600 bg-red-50 p-4 rounded-md">
+                    </div>
+                    
+                    <div id="generate-test-result" class="mt-8 hidden">
+                        <div class="border-t border-gray-200 pt-4">
+                            <h4 class="text-lg font-medium text-gray-900 mb-2">Generated Test Case</h4>
+                            <div class="flex justify-between items-center mb-2">
+                                <h5 id="test-title" class="text-md font-medium text-gray-700"></h5>
                                 <div>
-                                    <label for="test-requirements" class="block text-sm font-medium text-gray-700">Test Requirements</label>
-                                    <textarea id="test-requirements" name="test_requirements" rows="4" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Describe what you want to test (e.g., 'Test the CAN message filtering function with various input types and edge cases')"></textarea>
-                                </div>
-                                <div class="mt-5">
-                                    <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-                                        Generate Test Case
+                                    <button id="copy-test-result" class="text-sm text-green-600 hover:text-green-900">
+                                        <i class="far fa-copy mr-1"></i> Copy
+                                    </button>
+                                    <button id="download-test-result" class="ml-2 text-sm text-green-600 hover:text-green-900">
+                                        <i class="fas fa-download mr-1"></i> Download
                                     </button>
                                 </div>
-                            </form>
-                            
-                            <div id="generate-test-result" class="mt-8 hidden">
-                                <div class="border-t border-gray-200 pt-4">
-                                    <h4 class="text-lg font-medium text-gray-900 mb-2">Generated Test Case</h4>
-                                    <div class="flex justify-between items-center mb-2">
-                                        <h5 id="test-title" class="text-md font-medium text-gray-700"></h5>
-                                        <div>
-                                            <button id="copy-test-result" class="text-sm text-green-600 hover:text-green-900">
-                                                <i class="far fa-copy mr-1"></i> Copy
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div class="relative">
-                                        <pre><code id="test-code" class="language-python rounded-md"></code></pre>
-                                    </div>
-                                </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Execute Test Tab -->
-                <div id="content-execute-test" class="tab-pane hidden">
-                    <div class="bg-white shadow sm:rounded-lg">
-                        <div class="px-4 py-5 sm:p-6">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900">Execute Test Case</h3>
-                            <div class="mt-2 max-w-xl text-sm text-gray-500">
-                                <p>Run test cases against your scripts and view the results.</p>
-                            </div>
-                            <form id="execute-test-form" class="mt-5">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <div class="mb-4">
-                                    <label for="execute-select-script" class="block text-sm font-medium text-gray-700">Select Script</label>
-                                    <select id="execute-select-script" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
-                                        <option value="">-- Select a script --</option>
-                                        {% for script in scripts %}
-                                        <option value="{{ script.id }}">{{ script.title }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="mb-4">
-                                    <label for="execute-select-test" class="block text-sm font-medium text-gray-700">Select Test Case</label>
-                                    <select id="execute-select-test" name="test_case_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md" disabled>
-                                        <option value="">-- Select a test case --</option>
-                                    </select>
-                                </div>
-                                <div class="mb-4">
-                                    <label for="execute-script-content" class="block text-sm font-medium text-gray-700">Script Content</label>
-                                    <textarea id="execute-script-content" name="script_content" rows="6" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono" readonly></textarea>
-                                </div>
-                                <div class="mb-4">
-                                    <label for="execute-test-content" class="block text-sm font-medium text-gray-700">Test Case Content</label>
-                                    <textarea id="execute-test-content" name="test_content" rows="6" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono" readonly></textarea>
-                                </div>
-                                <div class="mt-5">
-                                    <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500" disabled>
-                                        Execute Test
-                                    </button>
-                                </div>
-                            </form>
-                            
-                            <div id="execute-test-result" class="mt-8 hidden">
-                                <div class="border-t border-gray-200 pt-4">
-                                    <h4 class="text-lg font-medium text-gray-900 mb-4">Test Execution Results</h4>
-                                    
-                                    <div class="mb-6">
-                                        <div class="flex items-center mb-2">
-                                            <h5 class="text-md font-medium text-gray-700">Status</h5>
-                                            <span id="test-status-badge" class="ml-2 px-2 py-1 text-xs font-medium rounded-full"></span>
-                                        </div>
-                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <p class="text-sm text-gray-500">Execution Time</p>
-                                                <p id="test-execution-time" class="text-sm font-medium text-gray-900"></p>
-                                            </div>
-                                            <div>
-                                                <p class="text-sm text-gray-500">Timestamp</p>
-                                                <p id="test-timestamp" class="text-sm font-medium text-gray-900"></p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div>
-                                        <h5 class="text-md font-medium text-gray-700 mb-2">Output</h5>
-                                        <pre id="test-output" class="bg-gray-50 rounded-md p-4 text-sm text-gray-700 overflow-x-auto font-mono whitespace-pre-wrap"></pre>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Improve Test Case Tab -->
-                <div id="content-improve-test" class="tab-pane hidden">
-                    <div class="bg-white shadow sm:rounded-lg">
-                        <div class="px-4 py-5 sm:p-6">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900">Improve Test Case</h3>
-                            <div class="mt-2 max-w-xl text-sm text-gray-500">
-                                <p>Enhance an existing test case based on execution results and feedback.</p>
-                            </div>
-                            <form id="improve-test-form" class="mt-5">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <div class="mb-4">
-                                    <label for="improve-select-script" class="block text-sm font-medium text-gray-700">Select Script</label>
-                                    <select id="improve-select-script" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
-                                        <option value="">-- Select a script --</option>
-                                        {% for script in scripts %}
-                                        <option value="{{ script.id }}">{{ script.title }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="mb-4">
-                                    <label for="improve-select-test" class="block text-sm font-medium text-gray-700">Select Test Case</label>
-                                    <select id="improve-select-test" name="test_case_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md" disabled>
-                                        <option value="">-- Select a test case --</option>
-                                    </select>
-                                </div>
-                                <div class="mb-4">
-                                    <label for="improve-script-content" class="block text-sm font-medium text-gray-700">Script Content</label>
-                                    <textarea id="improve-script-content" name="script_content" rows="6" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono" readonly></textarea>
-                                </div>
-                                <div class="mb-4">
-                                    <label for="improve-test-content" class="block text-sm font-medium text-gray-700">Test Case Content</label>
-                                    <textarea id="improve-test-content" name="test_content" rows="6" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono" readonly></textarea>
-                                </div>
-                                <div class="mb-4">
-                                    <label for="improve-test-result" class="block text-sm font-medium text-gray-700">Test Execution Results</label>
-                                    <textarea id="improve-test-result" name="test_result_output" rows="6" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono" placeholder="Paste the output from test execution"></textarea>
-                                </div>
-                                <div class="mt-5">
-                                    <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500" disabled>
-                                        Improve Test Case
-                                    </button>
-                                </div>
-                            </form>
-                            
-                            <div id="improve-test-result" class="mt-8 hidden">
-                                <div class="border-t border-gray-200 pt-4">
-                                    <h4 class="text-lg font-medium text-gray-900 mb-2">Improved Test Case</h4>
-                                    <div class="flex justify-between items-center mb-2">
-                                        <h5 id="improved-test-title" class="text-md font-medium text-gray-700"></h5>
-                                        <div>
-                                            <button id="copy-improved-test" class="text-sm text-green-600 hover:text-green-900">
-                                                <i class="far fa-copy mr-1"></i> Copy
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div class="relative">
-                                        <pre><code id="improved-test-code" class="language-python rounded-md"></code></pre>
-                                    </div>
-                                </div>
+                            <div class="relative">
+                                <pre class="bg-gray-800 rounded-lg overflow-x-auto"><code id="test-code" class="language-python text-white p-4"></code></pre>
                             </div>
                         </div>
                     </div>
@@ -245,5 +108,186 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/testing.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Elements for Generate Test Case
+    const generateTestForm = document.getElementById('generate-test-form');
+    const testScriptContent = document.getElementById('test-script-content');
+    const testRequirements = document.getElementById('test-requirements');
+    const generateTestLoading = document.getElementById('generate-test-loading');
+    const generateTestError = document.getElementById('generate-test-error');
+    const generateTestResult = document.getElementById('generate-test-result');
+    const testTitle = document.getElementById('test-title');
+    const testCode = document.getElementById('test-code');
+    const copyTestResult = document.getElementById('copy-test-result');
+    const downloadTestResult = document.getElementById('download-test-result');
+    const scriptFileInput = document.getElementById('script-file');
+    
+    // Handle file upload
+    if (scriptFileInput) {
+        scriptFileInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    testScriptContent.value = e.target.result;
+                };
+                reader.readAsText(file);
+            }
+        });
+    }
+    
+    // Drag and drop functionality
+    const dropZone = document.querySelector('.border-dashed');
+    if (dropZone) {
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+        
+        function highlight() {
+            dropZone.classList.add('border-indigo-300', 'bg-indigo-50');
+        }
+        
+        function unhighlight() {
+            dropZone.classList.remove('border-indigo-300', 'bg-indigo-50');
+        }
+        
+        dropZone.addEventListener('drop', handleDrop, false);
+        
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const file = dt.files[0];
+            
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    testScriptContent.value = e.target.result;
+                };
+                reader.readAsText(file);
+            }
+        }
+    }
+    
+    // Generate Test Case Form Submit
+    if (generateTestForm) {
+        generateTestForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Hide previous results and errors
+            generateTestResult.classList.add('hidden');
+            generateTestError.classList.add('hidden');
+            
+            // Show loading state
+            generateTestLoading.classList.remove('hidden');
+            
+            // Get form data
+            const script_content = testScriptContent.value;
+            const test_requirements = testRequirements.value;
+            
+            if (!script_content) {
+                generateTestError.textContent = 'Please provide a script to test';
+                generateTestError.classList.remove('hidden');
+                generateTestLoading.classList.add('hidden');
+                return;
+            }
+            
+            if (!test_requirements) {
+                generateTestError.textContent = 'Please provide test requirements';
+                generateTestError.classList.remove('hidden');
+                generateTestLoading.classList.add('hidden');
+                return;
+            }
+            
+            try {
+                // Create a temporary script ID since we're not using the database in this simplified version
+                const script_id = Date.now().toString();
+                
+                const result = await apiRequest('/api/testing/generate', 'POST', { 
+                    script_id, 
+                    script_content, 
+                    test_requirements 
+                });
+                
+                // Hide loading
+                generateTestLoading.classList.add('hidden');
+                
+                if (result.success) {
+                    // Update the UI with the generated test case
+                    testTitle.textContent = result.test_case.title;
+                    testCode.textContent = result.test_case.content;
+                    
+                    // Highlight the code
+                    if (typeof hljs !== 'undefined') {
+                        hljs.highlightElement(testCode);
+                    }
+                    
+                    // Show the result
+                    generateTestResult.classList.remove('hidden');
+                    
+                    // Scroll to the result
+                    generateTestResult.scrollIntoView({ behavior: 'smooth' });
+                    
+                    showToast('Test case generated successfully!', 'success');
+                } else {
+                    generateTestError.textContent = result.message || 'Failed to generate test case';
+                    generateTestError.classList.remove('hidden');
+                    showToast(result.message || 'Failed to generate test case', 'error');
+                }
+            } catch (error) {
+                // Hide loading
+                generateTestLoading.classList.add('hidden');
+                
+                // Show error
+                generateTestError.textContent = `Error: ${error.message}`;
+                generateTestError.classList.remove('hidden');
+                showToast(`Error: ${error.message}`, 'error');
+            }
+        });
+    }
+    
+    // Copy button event listener
+    if (copyTestResult) {
+        copyTestResult.addEventListener('click', function() {
+            const codeToCopy = testCode.textContent;
+            copyToClipboard(codeToCopy);
+        });
+    }
+    
+    // Download button event listener
+    if (downloadTestResult) {
+        downloadTestResult.addEventListener('click', function() {
+            const title = testTitle.textContent.trim() || 'test_case';
+            const filename = 'test_' + title.toLowerCase().replace(/\s+/g, '_') + '.py';
+            
+            const codeToCopy = testCode.textContent;
+            
+            // Create a blob and download link
+            const blob = new Blob([codeToCopy], {type: 'text/plain'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showToast(`Downloaded ${filename}`, 'success');
+        });
+    }
+});
+</script>
 {% endblock %}
