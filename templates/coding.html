@@ -3,7 +3,15 @@
 {% block title %}TARA Assistant - Coding Module{% endblock %}
 
 {% block styles %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/coding.css') }}">
+<style>
+    .code-textarea {
+        font-family: monospace;
+        min-height: 200px;
+        white-space: pre;
+        overflow-wrap: normal;
+        overflow-x: scroll;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -21,278 +29,64 @@
     
     <main class="mt-6">
         <div class="px-4 sm:px-6 lg:px-8">
-            <!-- Tabs -->
-            <div class="mb-6">
-                <div class="sm:hidden">
-                    <label for="tabs" class="sr-only">Select a tab</label>
-                    <select id="tabs" name="tabs" class="block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500">
-                        <option value="generate">Generate Script</option>
-                        <option value="debug">Debug Script</option>
-                        <option value="modify">Modify Script</option>
-                        <option value="compare">Compare Versions</option>
-                    </select>
+            <!-- Generate Script Tab -->
+            <div id="content-generate" class="bg-white shadow sm:rounded-lg p-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Generate a New Script</h3>
+                <div class="mt-2 max-w-xl text-sm text-gray-500 mb-4">
+                    <p>Describe the script you need, including its purpose, functionality, and any specific requirements.</p>
                 </div>
-                <div class="hidden sm:block">
-                    <div class="border-b border-gray-200">
-                        <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-                            <a href="#" id="tab-generate" class="tab-button border-indigo-500 text-indigo-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" aria-current="page">
-                                Generate Script
-                            </a>
-                            <a href="#" id="tab-debug" class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                                Debug Script
-                            </a>
-                            <a href="#" id="tab-modify" class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                                Modify Script
-                            </a>
-                            <a href="#" id="tab-compare" class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                                Compare Versions
-                            </a>
-                        </nav>
+                <form id="generate-form" class="mt-5">
+                    <div class="mb-4">
+                        <label for="language" class="block text-sm font-medium text-gray-700">Language</label>
+                        <select id="language" name="language" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                            <option value="python" selected>Python</option>
+                            <option value="javascript">JavaScript</option>
+                            <option value="c">C</option>
+                            <option value="cpp">C++</option>
+                        </select>
                     </div>
-                </div>
-            </div>
-            
-            <!-- Tab contents -->
-            <div class="tab-content">
-                <!-- Generate Script Tab -->
-                <div id="content-generate" class="tab-pane active">
-                    <div class="bg-white shadow sm:rounded-lg">
-                        <div class="px-4 py-5 sm:p-6">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900">Generate a New Script</h3>
-                            <div class="mt-2 max-w-xl text-sm text-gray-500">
-                                <p>Describe the script you need, including its purpose, functionality, and any specific requirements.</p>
+                    <div class="mb-4">
+                        <label for="prompt" class="block text-sm font-medium text-gray-700">Script Requirements</label>
+                        <textarea id="prompt" name="prompt" rows="6" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Describe the script you need (e.g., 'Create a script to simulate CAN bus traffic for testing ECU responses to potential attack patterns')"></textarea>
+                    </div>
+                    <div class="mt-5">
+                        <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Generate Script
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="generate-result" class="mt-8 hidden">
+                    <div class="border-t border-gray-200 pt-4">
+                        <h4 class="text-lg font-medium text-gray-900 mb-2">Generated Script</h4>
+                        <div class="flex justify-between items-center mb-2">
+                            <h5 id="generate-title" class="text-md font-medium text-gray-700"></h5>
+                            <div>
+                                <button id="copy-generate-result" class="text-sm text-indigo-600 hover:text-indigo-900">
+                                    <i class="far fa-copy mr-1"></i> Copy
+                                </button>
+                                <button id="download-generate-result" class="ml-2 text-sm text-indigo-600 hover:text-indigo-900">
+                                    <i class="fas fa-download mr-1"></i> Download
+                                </button>
                             </div>
-                            <form id="generate-form" class="mt-5">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <div>
-                                    <label for="language" class="block text-sm font-medium text-gray-700">Language</label>
-                                    <select id="language" name="language" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
-                                        <option value="python" selected>Python</option>
-                                        <option value="javascript">JavaScript</option>
-                                        <option value="c">C</option>
-                                        <option value="cpp">C++</option>
-                                    </select>
-                                </div>
-                                <div class="mt-4">
-                                    <label for="prompt" class="block text-sm font-medium text-gray-700">Script Requirements</label>
-                                    <textarea id="prompt" name="prompt" rows="6" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Describe the script you need (e.g., 'Create a script to simulate CAN bus traffic for testing ECU responses to potential attack patterns')"></textarea>
-                                </div>
-                                <div class="mt-5">
-                                    <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                                        Generate Script
-                                    </button>
-                                </div>
-                            </form>
-                            
-                            <div id="generate-result" class="mt-8 hidden">
-                                <div class="border-t border-gray-200 pt-4">
-                                    <h4 class="text-lg font-medium text-gray-900 mb-2">Generated Script</h4>
-                                    <div class="flex justify-between items-center mb-2">
-                                        <h5 id="generate-title" class="text-md font-medium text-gray-700"></h5>
-                                        <div>
-                                            <button id="copy-generate-result" class="text-sm text-indigo-600 hover:text-indigo-900">
-                                                <i class="far fa-copy mr-1"></i> Copy
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div class="relative">
-                                        <pre><code id="generate-code" class="language-python rounded-md"></code></pre>
-                                    </div>
-                                </div>
-                            </div>
+                        </div>
+                        <div class="relative">
+                            <pre class="bg-gray-800 rounded-lg overflow-x-auto"><code id="generate-code" class="language-python text-white p-4"></code></pre>
                         </div>
                     </div>
                 </div>
                 
-                <!-- Debug Script Tab -->
-                <div id="content-debug" class="tab-pane hidden">
-                    <div class="bg-white shadow sm:rounded-lg">
-                        <div class="px-4 py-5 sm:p-6">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900">Debug a Script</h3>
-                            <div class="mt-2 max-w-xl text-sm text-gray-500">
-                                <p>Provide a script with potential issues, and the assistant will identify and fix them, explaining each correction.</p>
-                            </div>
-                            <form id="debug-form" class="mt-5">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <div class="mb-4">
-                                    <label for="debug-select-script" class="block text-sm font-medium text-gray-700">Select Existing Script (Optional)</label>
-                                    <select id="debug-select-script" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
-                                        <option value="">-- Select a script --</option>
-                                        {% for script in scripts %}
-                                        <option value="{{ script.id }}">{{ script.title }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label for="debug-content" class="block text-sm font-medium text-gray-700">Script to Debug</label>
-                                    <textarea id="debug-content" name="script_content" rows="10" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono" placeholder="Paste the script you want to debug"></textarea>
-                                    <input type="hidden" id="debug-script-id" name="script_id" value="">
-                                </div>
-                                <div class="mt-5">
-                                    <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                                        Debug Script
-                                    </button>
-                                </div>
-                            </form>
-                            
-                            <div id="debug-result" class="mt-8 hidden">
-                                <div class="border-t border-gray-200 pt-4">
-                                    <h4 class="text-lg font-medium text-gray-900 mb-4">Debugging Results</h4>
-                                    
-                                    <div class="mb-6">
-                                        <h5 class="text-md font-medium text-gray-700 mb-2">Explanation</h5>
-                                        <div id="debug-explanation" class="bg-gray-50 rounded-md p-4 text-sm text-gray-700"></div>
-                                    </div>
-                                    
-                                    <div class="mb-6">
-                                        <h5 class="text-md font-medium text-gray-700 mb-2">Changes</h5>
-                                        <div id="debug-diff" class="bg-gray-50 rounded-md p-4 text-sm overflow-x-auto"></div>
-                                    </div>
-                                    
-                                    <div>
-                                        <div class="flex justify-between items-center mb-2">
-                                            <h5 class="text-md font-medium text-gray-700">Fixed Script</h5>
-                                            <div>
-                                                <button id="copy-debug-result" class="text-sm text-indigo-600 hover:text-indigo-900">
-                                                    <i class="far fa-copy mr-1"></i> Copy
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div class="relative">
-                                            <pre><code id="debug-code" class="language-python rounded-md"></code></pre>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                <!-- Loading indicator -->
+                <div id="generate-loading" class="hidden mt-4 flex items-center justify-center">
+                    <svg class="animate-spin h-5 w-5 text-indigo-500 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Generating script...</span>
                 </div>
                 
-                <!-- Modify Script Tab -->
-                <div id="content-modify" class="tab-pane hidden">
-                    <div class="bg-white shadow sm:rounded-lg">
-                        <div class="px-4 py-5 sm:p-6">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900">Modify a Script</h3>
-                            <div class="mt-2 max-w-xl text-sm text-gray-500">
-                                <p>Request specific modifications to an existing script, such as adding new features or improving performance.</p>
-                            </div>
-                            <form id="modify-form" class="mt-5">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <div class="mb-4">
-                                    <label for="modify-select-script" class="block text-sm font-medium text-gray-700">Select Existing Script (Optional)</label>
-                                    <select id="modify-select-script" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
-                                        <option value="">-- Select a script --</option>
-                                        {% for script in scripts %}
-                                        <option value="{{ script.id }}">{{ script.title }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="mb-4">
-                                    <label for="modify-content" class="block text-sm font-medium text-gray-700">Script to Modify</label>
-                                    <textarea id="modify-content" name="script_content" rows="10" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono" placeholder="Paste the script you want to modify"></textarea>
-                                    <input type="hidden" id="modify-script-id" name="script_id" value="">
-                                </div>
-                                <div>
-                                    <label for="modification-request" class="block text-sm font-medium text-gray-700">Modification Request</label>
-                                    <textarea id="modification-request" name="modification_request" rows="4" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Describe the modifications you need (e.g., 'Add a function to filter messages by ID')"></textarea>
-                                </div>
-                                <div class="mt-5">
-                                    <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                                        Modify Script
-                                    </button>
-                                </div>
-                            </form>
-                            
-                            <div id="modify-result" class="mt-8 hidden">
-                                <div class="border-t border-gray-200 pt-4">
-                                    <h4 class="text-lg font-medium text-gray-900 mb-4">Modification Results</h4>
-                                    
-                                    <div class="mb-6">
-                                        <h5 class="text-md font-medium text-gray-700 mb-2">Explanation of Changes</h5>
-                                        <div id="modify-explanation" class="bg-gray-50 rounded-md p-4 text-sm text-gray-700"></div>
-                                    </div>
-                                    
-                                    <div class="mb-6">
-                                        <h5 class="text-md font-medium text-gray-700 mb-2">Changes</h5>
-                                        <div id="modify-diff" class="bg-gray-50 rounded-md p-4 text-sm overflow-x-auto"></div>
-                                    </div>
-                                    
-                                    <div>
-                                        <div class="flex justify-between items-center mb-2">
-                                            <h5 class="text-md font-medium text-gray-700">Modified Script</h5>
-                                            <div>
-                                                <button id="copy-modify-result" class="text-sm text-indigo-600 hover:text-indigo-900">
-                                                    <i class="far fa-copy mr-1"></i> Copy
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div class="relative">
-                                            <pre><code id="modify-code" class="language-python rounded-md"></code></pre>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Compare Versions Tab -->
-                <div id="content-compare" class="tab-pane hidden">
-                    <div class="bg-white shadow sm:rounded-lg">
-                        <div class="px-4 py-5 sm:p-6">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900">Compare Script Versions</h3>
-                            <div class="mt-2 max-w-xl text-sm text-gray-500">
-                                <p>Compare different versions of a script to see what has changed and why.</p>
-                            </div>
-                            <form id="compare-form" class="mt-5">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <div class="mb-4">
-                                    <label for="compare-select-script" class="block text-sm font-medium text-gray-700">Select Script</label>
-                                    <select id="compare-select-script" name="script_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
-                                        <option value="">-- Select a script --</option>
-                                        {% for script in scripts %}
-                                        <option value="{{ script.id }}">{{ script.title }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                    <div>
-                                        <label for="compare-version1" class="block text-sm font-medium text-gray-700">Version 1</label>
-                                        <select id="compare-version1" name="version1_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md" disabled>
-                                            <option value="">-- Select a version --</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label for="compare-version2" class="block text-sm font-medium text-gray-700">Version 2</label>
-                                        <select id="compare-version2" name="version2_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md" disabled>
-                                            <option value="">-- Select a version --</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="mt-5">
-                                    <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" disabled>
-                                        Compare Versions
-                                    </button>
-                                </div>
-                            </form>
-                            
-                            <div id="compare-result" class="mt-8 hidden">
-                                <div class="border-t border-gray-200 pt-4">
-                                    <h4 class="text-lg font-medium text-gray-900 mb-4">Comparison Results</h4>
-                                    
-                                    <div class="mb-6">
-                                        <h5 class="text-md font-medium text-gray-700 mb-2">Explanation of Changes</h5>
-                                        <div id="compare-explanation" class="bg-gray-50 rounded-md p-4 text-sm text-gray-700"></div>
-                                    </div>
-                                    
-                                    <div>
-                                        <h5 class="text-md font-medium text-gray-700 mb-2">Differences</h5>
-                                        <div id="compare-diff" class="bg-gray-50 rounded-md p-4 text-sm overflow-x-auto"></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                <!-- Error message -->
+                <div id="generate-error" class="hidden mt-4 text-red-600 bg-red-50 p-4 rounded-md">
                 </div>
             </div>
         </div>
@@ -301,5 +95,110 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/coding.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Elements for Generate Script
+    const generateForm = document.getElementById('generate-form');
+    const generateLoading = document.getElementById('generate-loading');
+    const generateError = document.getElementById('generate-error');
+    const generateResult = document.getElementById('generate-result');
+    const generateCode = document.getElementById('generate-code');
+    const generateTitle = document.getElementById('generate-title');
+    const copyGenerateButton = document.getElementById('copy-generate-result');
+    const downloadGenerateButton = document.getElementById('download-generate-result');
+    
+    // Generate Script Form Submit
+    if (generateForm) {
+        generateForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Hide previous results and errors
+            generateResult.classList.add('hidden');
+            generateError.classList.add('hidden');
+            
+            // Show loading state
+            generateLoading.classList.remove('hidden');
+            
+            // Get form data
+            const prompt = document.getElementById('prompt').value;
+            const language = document.getElementById('language').value;
+            
+            try {
+                const result = await apiRequest('/api/coding/generate', 'POST', { prompt, language });
+                
+                // Hide loading
+                generateLoading.classList.add('hidden');
+                
+                if (result.success) {
+                    // Update the UI with the generated script
+                    generateTitle.textContent = result.script.title;
+                    generateCode.textContent = result.script.content;
+                    generateCode.className = `language-${language} text-white p-4`;
+                    
+                    // Highlight the code
+                    if (typeof hljs !== 'undefined') {
+                        hljs.highlightElement(generateCode);
+                    }
+                    
+                    // Show the result
+                    generateResult.classList.remove('hidden');
+                    
+                    // Scroll to the result
+                    generateResult.scrollIntoView({ behavior: 'smooth' });
+                    
+                    showToast('Script generated successfully!', 'success');
+                } else {
+                    generateError.textContent = result.message || 'Failed to generate script';
+                    generateError.classList.remove('hidden');
+                    showToast(result.message || 'Failed to generate script', 'error');
+                }
+            } catch (error) {
+                // Hide loading
+                generateLoading.classList.add('hidden');
+                
+                // Show error
+                generateError.textContent = `Error: ${error.message}`;
+                generateError.classList.remove('hidden');
+                showToast(`Error: ${error.message}`, 'error');
+            }
+        });
+    }
+    
+    // Copy button event listener
+    if (copyGenerateButton) {
+        copyGenerateButton.addEventListener('click', function() {
+            const codeToCopy = generateCode.textContent;
+            copyToClipboard(codeToCopy);
+        });
+    }
+    
+    // Download button event listener
+    if (downloadGenerateButton) {
+        downloadGenerateButton.addEventListener('click', function() {
+            const language = document.getElementById('language').value;
+            const extension = language === 'python' ? '.py' : 
+                              language === 'javascript' ? '.js' : 
+                              language === 'c' ? '.c' : '.cpp';
+            
+            const title = generateTitle.textContent.trim() || 'generated_script';
+            const filename = title.toLowerCase().replace(/\s+/g, '_') + extension;
+            
+            const codeToCopy = generateCode.textContent;
+            
+            // Create a blob and download link
+            const blob = new Blob([codeToCopy], {type: 'text/plain'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showToast(`Downloaded ${filename}`, 'success');
+        });
+    }
+});
+</script>
 {% endblock %}
