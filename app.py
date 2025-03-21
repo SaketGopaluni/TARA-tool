@@ -1,65 +1,67 @@
 import os
-from flask import Flask, render_template, request, jsonify, session
+import tempfile
+import uuid
+import json
+from flask import Flask, render_template, request, jsonify, session, Response
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
-import json
-import uuid
+from dotenv import load_dotenv
+import traceback
 
-from config import config
-from database import db, Script, TestCase, ChatSession
-from modules.coding import CodingModule
-from modules.testing import TestingModule
-from modules.chat import ChatModule
+# Load environment variables
+load_dotenv()
 
-def create_app(config_name="default"):
-    """
-    Create and configure the Flask application.
+# Import OpenAI
+from openai import OpenAI
+
+# Create Flask app
+app = Flask(__name__, static_folder="static", template_folder="templates")
+
+# Configure the app
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-for-testing')
+app.config['OPENAI_API_KEY'] = os.environ.get('OPENAI_API_KEY')
+app.config['OPENAI_MODEL'] = os.environ.get('OPENAI_MODEL', 'gpt-4o')
+app.config['DEBUG'] = os.environ.get('DEBUG', 'False').lower() == 'true'
+
+# Setup CSRF protection
+csrf = CSRFProtect(app)
+
+# Setup proxy fix for Vercel
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+# Initialize OpenAI client
+openai_client = OpenAI(api_key=app.config['OPENAI_API_KEY'], base_url="https://api.openai.com/v1")
+
+# Home route
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+# Coding route
+@app.route('/coding')
+def coding():
+    return render_template('coding.html')
+
+# Testing route
+@app.route('/testing')
+def testing():
+    return render_template('testing.html')
+
+# Chat route
+@app.route('/chat')
+def chat():
+    # Initialize session ID if not present
+    if 'chat_session_id' not in session:
+        session['chat_session_id'] = str(uuid.uuid4())
     
-    Args:
-        config_name (str): Configuration to use
-    
-    Returns:
-        Flask: Configured Flask application
-    """
-    app = Flask(__name__, static_folder="static", template_folder="templates")
-    
-    # Load configuration
-    app.config.from_object(config[config_name])
-    
-    # Setup CSRF protection
-    csrf = CSRFProtect(app)
-    
-    # Initialize extensions
-    db.init_app(app)
-    
-    # Setup proxy fix for Vercel
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
-    
-    # Initialize modules
-    coding_module = CodingModule(app.config["OPENAI_API_KEY"], app.config["OPENAI_MODEL"])
-    testing_module = TestingModule(app.config["OPENAI_API_KEY"], app.config["OPENAI_MODEL"])
-    chat_module = ChatModule(app.config["OPENAI_API_KEY"], app.config["OPENAI_MODEL"])
-    
-    # Create database tables
-    with app.app_context():
-        db.create_all()
-    
-    # Routes
-    @app.route('/')
-    def index():
-        """Render the landing page."""
-        return render_template('index.html')
-    
-    # Coding Module Routes
-    @app.route('/coding')
-    def coding():
-        """Render the coding module page."""
-        scripts = Script.query.order_by(Script.updated_at.desc()).all()
-        return render_template('coding.html', scripts=scripts)
-    
-    @app.route('/api/coding/generate', methods=['POST'])
-    def generate_script():
-        """Generate a new script."""
+    return render_template('chat.html')
+
+# API Routes
+
+# Coding API - Generate Script
+@app.route('/api/coding/generate', methods=['POST'])
+def generate_script():
+    try:
         data = request.json
         prompt = data.get('prompt')
         language = data.get('language', 'python')
@@ -67,347 +69,254 @@ def create_app(config_name="default"):
         if not prompt:
             return jsonify({"success": False, "message": "Prompt is required"}), 400
         
-        result = coding_module.generate_script(prompt, language)
-        return jsonify(result)
-    
-    @app.route('/api/coding/debug', methods=['POST'])
-    def debug_script():
-        """Debug an existing script."""
-        data = request.json
-        script_id = data.get('script_id')
-        script_content = data.get('script_content')
+        # Generate the script using OpenAI
+        system_message = f"""You are an expert {language} developer specializing in cybersecurity and
+        automotive systems. Generate a well-commented, production-ready script based on the user's requirements.
+        Focus on security best practices, error handling, and maintainability."""
         
-        if not script_id or not script_content:
-            return jsonify({"success": False, "message": "Script ID and content are required"}), 400
+        response = openai_client.chat.completions.create(
+            model=app.config['OPENAI_MODEL'],
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.2,
+            max_tokens=4000
+        )
         
-        result = coding_module.debug_script(script_id, script_content)
-        return jsonify(result)
-    
-    @app.route('/api/coding/modify', methods=['POST'])
-    def modify_script():
-        """Modify an existing script."""
-        data = request.json
-        script_id = data.get('script_id')
-        script_content = data.get('script_content')
-        modification_request = data.get('modification_request')
+        script_content = response.choices[0].message.content.strip()
         
-        if not script_id or not script_content or not modification_request:
-            return jsonify({"success": False, "message": "Script ID, content, and modification request are required"}), 400
+        # Extract code from markdown code blocks if present
+        if "```" in script_content:
+            script_content = extract_code_from_markdown(script_content)
         
-        result = coding_module.modify_script(script_id, script_content, modification_request)
-        return jsonify(result)
-    
-    @app.route('/api/coding/explain-changes', methods=['POST'])
-    def explain_changes():
-        """Explain changes between two versions of a script."""
-        data = request.json
-        old_content = data.get('old_content')
-        new_content = data.get('new_content')
+        # Create a simple title from the prompt
+        title = prompt.split('\n')[0].strip() if '\n' in prompt else prompt[:50] + "..."
         
-        if not old_content or not new_content:
-            return jsonify({"success": False, "message": "Old and new content are required"}), 400
-        
-        result = coding_module.explain_changes(old_content, new_content)
-        return jsonify(result)
-    
-    @app.route('/api/coding/compare-versions', methods=['POST'])
-    def compare_versions():
-        """Compare two versions of a script."""
-        data = request.json
-        script_id = data.get('script_id')
-        version1_id = data.get('version1_id')
-        version2_id = data.get('version2_id')
-        
-        if not script_id or not version1_id or not version2_id:
-            return jsonify({"success": False, "message": "Script ID and version IDs are required"}), 400
-        
-        result = coding_module.compare_versions(script_id, version1_id, version2_id)
-        return jsonify(result)
-    
-    @app.route('/api/coding/versions/<int:script_id>', methods=['GET'])
-    def get_script_versions(script_id):
-        """Get all versions of a script."""
-        result = coding_module.get_script_versions(script_id)
-        return jsonify(result)
-    
-    @app.route('/api/coding/scripts', methods=['GET'])
-    def get_scripts():
-        """Get all scripts."""
-        scripts = Script.query.order_by(Script.updated_at.desc()).all()
+        # Return the script
         return jsonify({
             "success": True,
-            "scripts": [script.to_dict() for script in scripts],
-            "message": f"Retrieved {len(scripts)} scripts successfully"
+            "script": {
+                "id": str(uuid.uuid4()),  # Generate a fake ID for the script
+                "title": title,
+                "content": script_content,
+                "language": language
+            },
+            "message": "Script generated successfully"
         })
-    
-    @app.route('/api/coding/scripts/<int:script_id>', methods=['GET'])
-    def get_script(script_id):
-        """Get a specific script."""
-        script = Script.query.get(script_id)
         
-        if not script:
-            return jsonify({"success": False, "message": "Script not found"}), 404
-        
+    except Exception as e:
+        app.logger.error(f"Error generating script: {str(e)}")
+        app.logger.error(traceback.format_exc())
         return jsonify({
-            "success": True,
-            "script": script.to_dict(),
-            "message": "Script retrieved successfully"
-        })
-    
-    # Testing Module Routes
-    @app.route('/testing')
-    def testing():
-        """Render the testing module page."""
-        scripts = Script.query.order_by(Script.updated_at.desc()).all()
-        test_cases = TestCase.query.order_by(TestCase.updated_at.desc()).all()
-        return render_template('testing.html', scripts=scripts, test_cases=test_cases)
-    
-    @app.route('/api/testing/generate', methods=['POST'])
-    def generate_test_case():
-        """Generate a test case for a script."""
+            "success": False,
+            "error": str(e),
+            "message": "Failed to generate script"
+        }), 500
+
+# Testing API - Generate Test Case
+@app.route('/api/testing/generate', methods=['POST'])
+def generate_test_case():
+    try:
         data = request.json
         script_id = data.get('script_id')
         script_content = data.get('script_content')
         test_requirements = data.get('test_requirements')
         
-        if not script_id or not script_content or not test_requirements:
-            return jsonify({"success": False, "message": "Script ID, content, and test requirements are required"}), 400
+        if not script_content or not test_requirements:
+            return jsonify({
+                "success": False, 
+                "message": "Script content and test requirements are required"
+            }), 400
         
-        result = testing_module.generate_test_case(script_id, script_content, test_requirements)
-        return jsonify(result)
-    
-    @app.route('/api/testing/execute', methods=['POST'])
-    def execute_test():
-        """Execute a test case."""
-        data = request.json
-        test_case_id = data.get('test_case_id')
-        test_content = data.get('test_content')
-        script_content = data.get('script_content')
+        # Generate the test case using OpenAI
+        system_message = """You are an expert in writing Python unit tests. Your task is to create
+        comprehensive test cases for the provided code, following best practices for testing.
+        Include setup, assertions, and error handling in your tests."""
         
-        if not test_case_id or not test_content or not script_content:
-            return jsonify({"success": False, "message": "Test case ID, content, and script content are required"}), 400
+        response = openai_client.chat.completions.create(
+            model=app.config['OPENAI_MODEL'],
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": f"Write unit tests for the following code, according to these requirements: '{test_requirements}'\n\n{script_content}"}
+            ],
+            temperature=0.2,
+            max_tokens=4000
+        )
         
-        result = testing_module.execute_test(test_case_id, test_content, script_content)
-        return jsonify(result)
-    
-    @app.route('/api/testing/improve', methods=['POST'])
-    def improve_test_case():
-        """Improve a test case based on execution results."""
-        data = request.json
-        test_case_id = data.get('test_case_id')
-        test_content = data.get('test_content')
-        script_content = data.get('script_content')
-        test_result_output = data.get('test_result_output')
+        test_content = response.choices[0].message.content.strip()
         
-        if not test_case_id or not test_content or not script_content or not test_result_output:
-            return jsonify({"success": False, "message": "Test case ID, content, script content, and test result output are required"}), 400
+        # Extract code from markdown code blocks if present
+        if "```" in test_content:
+            test_content = extract_code_from_markdown(test_content)
         
-        result = testing_module.improve_test_case(test_case_id, test_content, script_content, test_result_output)
-        return jsonify(result)
-    
-    @app.route('/api/testing/test-cases', methods=['GET'])
-    def get_test_cases():
-        """Get all test cases."""
-        script_id = request.args.get('script_id')
+        # Create a simple title from the test requirements
+        title = test_requirements.split('\n')[0].strip() if '\n' in test_requirements else test_requirements[:50] + "..."
         
-        if script_id:
-            test_cases = TestCase.query.filter_by(script_id=script_id).order_by(TestCase.updated_at.desc()).all()
-        else:
-            test_cases = TestCase.query.order_by(TestCase.updated_at.desc()).all()
-        
+        # Return the test case
         return jsonify({
             "success": True,
-            "test_cases": [test_case.to_dict() for test_case in test_cases],
-            "message": f"Retrieved {len(test_cases)} test cases successfully"
+            "test_case": {
+                "id": str(uuid.uuid4()),  # Generate a fake ID for the test case
+                "script_id": script_id,
+                "title": title,
+                "content": test_content
+            },
+            "message": "Test case generated successfully"
         })
-    
-    @app.route('/api/testing/test-cases/<int:test_case_id>', methods=['GET'])
-    def get_test_case(test_case_id):
-        """Get a specific test case."""
-        test_case = TestCase.query.get(test_case_id)
         
-        if not test_case:
-            return jsonify({"success": False, "message": "Test case not found"}), 404
-        
+    except Exception as e:
+        app.logger.error(f"Error generating test case: {str(e)}")
+        app.logger.error(traceback.format_exc())
         return jsonify({
-            "success": True,
-            "test_case": test_case.to_dict(),
-            "message": "Test case retrieved successfully"
-        })
-    
-    # Chat Module Routes
-    @app.route('/chat')
-    def chat():
-        """Render the chat module page."""
-        # Create or get chat session
-        if 'chat_session_id' not in session:
-            result = chat_module.create_session()
-            if result["success"]:
-                session['chat_session_id'] = result["session"]["session_id"]
-            else:
-                return render_template('error.html', error=result["error"])
-        
-        return render_template('chat.html')
-    
-    @app.route('/api/chat/session', methods=['POST'])
-    def create_chat_session():
-        """Create a new chat session."""
-        result = chat_module.create_session()
-        
-        if result["success"]:
-            session['chat_session_id'] = result["session"]["session_id"]
-        
-        return jsonify(result)
-    
-    @app.route('/api/chat/send', methods=['POST'])
-    def send_chat_message():
-        """Send a message to the chat."""
+            "success": False,
+            "error": str(e),
+            "message": "Failed to generate test case"
+        }), 500
+
+# Chat API - Send Message
+@app.route('/api/chat/send', methods=['POST'])
+def send_chat_message():
+    try:
         data = request.json
         message = data.get('message')
         query_type = data.get('query_type', 'general')
-        session_id = session.get('chat_session_id') or data.get('session_id')
-        
-        if not session_id:
-            # Create a new session if one doesn't exist
-            result = chat_module.create_session()
-            if result["success"]:
-                session_id = result["session"]["session_id"]
-                session['chat_session_id'] = session_id
-            else:
-                return jsonify(result), 500
         
         if not message:
             return jsonify({"success": False, "message": "Message is required"}), 400
         
-        result = chat_module.send_message(session_id, message, query_type)
-        return jsonify(result)
-    
-    @app.route('/api/chat/history', methods=['GET'])
-    def get_chat_history():
-        """Get the conversation history for the current session."""
-        session_id = session.get('chat_session_id')
+        # Get or create chat session ID
+        chat_session_id = session.get('chat_session_id')
+        if not chat_session_id:
+            chat_session_id = str(uuid.uuid4())
+            session['chat_session_id'] = chat_session_id
         
-        if not session_id:
-            return jsonify({"success": False, "message": "No active chat session"}), 400
+        # Initialize or get chat history
+        if 'chat_history' not in session:
+            session['chat_history'] = []
         
-        result = chat_module.get_conversation_history(session_id)
-        return jsonify(result)
-    
-    @app.route('/api/chat/clear', methods=['POST'])
-    def clear_chat_history():
-        """Clear the conversation history for the current session."""
-        session_id = session.get('chat_session_id')
+        chat_history = session.get('chat_history', [])
         
-        if not session_id:
-            return jsonify({"success": False, "message": "No active chat session"}), 400
+        # Add user message to history
+        chat_history.append({"role": "user", "content": message})
         
-        result = chat_module.clear_conversation_history(session_id)
-        return jsonify(result)
-    
-    @app.route('/api/chat/ecu-explanation', methods=['POST'])
-    def generate_ecu_explanation():
-        """Generate an explanation about a specific type of ECU."""
-        data = request.json
-        ecu_type = data.get('ecu_type')
-        session_id = session.get('chat_session_id') or data.get('session_id')
+        # Select system prompt based on query type
+        system_prompts = {
+            "general": """You are an expert in automotive cybersecurity, specializing in Threat Analysis and Risk Assessment (TARA).
+            Provide helpful, accurate information related to automotive cybersecurity, ECUs, threat modeling, and risk assessment.
+            When appropriate, reference industry standards such as ISO 21434, SAE J3061, and related best practices."""
+        }
         
-        if not session_id:
-            # Create a new session if one doesn't exist
-            result = chat_module.create_session()
-            if result["success"]:
-                session_id = result["session"]["session_id"]
-                session['chat_session_id'] = session_id
-            else:
-                return jsonify(result), 500
+        system_prompt = system_prompts.get(query_type, system_prompts["general"])
         
-        if not ecu_type:
-            return jsonify({"success": False, "message": "ECU type is required"}), 400
+        # Prepare messages for API call
+        openai_messages = [{"role": "system", "content": system_prompt}]
+        for msg in chat_history:
+            openai_messages.append({"role": msg["role"], "content": msg["content"]})
         
-        result = chat_module.generate_ecu_explanation(session_id, ecu_type)
-        return jsonify(result)
-    
-    @app.route('/api/chat/damage-scenario', methods=['POST'])
-    def generate_damage_scenario():
-        """Generate a damage scenario based on CIA triad."""
-        data = request.json
-        component = data.get('component')
-        cia_aspect = data.get('cia_aspect')
-        session_id = session.get('chat_session_id') or data.get('session_id')
+        # Call OpenAI API
+        response = openai_client.chat.completions.create(
+            model=app.config['OPENAI_MODEL'],
+            messages=openai_messages,
+            temperature=0.7,
+            max_tokens=2000
+        )
         
-        if not session_id:
-            # Create a new session if one doesn't exist
-            result = chat_module.create_session()
-            if result["success"]:
-                session_id = result["session"]["session_id"]
-                session['chat_session_id'] = session_id
-            else:
-                return jsonify(result), 500
+        assistant_response = response.choices[0].message.content.strip()
         
-        if not component or not cia_aspect:
-            return jsonify({"success": False, "message": "Component and CIA aspect are required"}), 400
+        # Add assistant response to history
+        chat_history.append({"role": "assistant", "content": assistant_response})
         
-        result = chat_module.generate_damage_scenario(session_id, component, cia_aspect)
-        return jsonify(result)
-    
-    @app.route('/api/chat/threat-scenario', methods=['POST'])
-    def generate_threat_scenario():
-        """Generate a threat scenario based on STRIDE model."""
-        data = request.json
-        component = data.get('component')
-        stride_aspect = data.get('stride_aspect')
-        session_id = session.get('chat_session_id') or data.get('session_id')
+        # Update session
+        session['chat_history'] = chat_history
         
-        if not session_id:
-            # Create a new session if one doesn't exist
-            result = chat_module.create_session()
-            if result["success"]:
-                session_id = result["session"]["session_id"]
-                session['chat_session_id'] = session_id
-            else:
-                return jsonify(result), 500
+        return jsonify({
+            "success": True,
+            "response": assistant_response,
+            "message": "Message sent successfully"
+        })
         
-        if not component or not stride_aspect:
-            return jsonify({"success": False, "message": "Component and STRIDE aspect are required"}), 400
-        
-        result = chat_module.generate_threat_scenario(session_id, component, stride_aspect)
-        return jsonify(result)
-    
-    @app.route('/api/chat/attack-pattern', methods=['POST'])
-    def generate_attack_pattern():
-        """Generate attack patterns based on dataflow description."""
-        data = request.json
-        dataflow_description = data.get('dataflow_description')
-        session_id = session.get('chat_session_id') or data.get('session_id')
-        
-        if not session_id:
-            # Create a new session if one doesn't exist
-            result = chat_module.create_session()
-            if result["success"]:
-                session_id = result["session"]["session_id"]
-                session['chat_session_id'] = session_id
-            else:
-                return jsonify(result), 500
-        
-        if not dataflow_description:
-            return jsonify({"success": False, "message": "Dataflow description is required"}), 400
-        
-        result = chat_module.generate_attack_pattern(session_id, dataflow_description)
-        return jsonify(result)
-    
-    @app.errorhandler(404)
-    def page_not_found(e):
-        """Handle 404 errors."""
-        return render_template('error.html', error="Page not found"), 404
-    
-    @app.errorhandler(500)
-    def server_error(e):
-        """Handle 500 errors."""
-        return render_template('error.html', error="Internal server error"), 500
-    
-    return app
+    except Exception as e:
+        app.logger.error(f"Error sending chat message: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "message": "Failed to send message"
+        }), 500
 
-# Create the application instance
-app = create_app(os.getenv('FLASK_CONFIG') or 'default')
+# Chat API - Get History
+@app.route('/api/chat/history', methods=['GET'])
+def get_chat_history():
+    try:
+        chat_history = session.get('chat_history', [])
+        
+        return jsonify({
+            "success": True,
+            "messages": chat_history,
+            "message": f"Retrieved {len(chat_history)} messages successfully"
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error getting chat history: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "message": "Failed to get chat history"
+        }), 500
 
+# Chat API - Clear History
+@app.route('/api/chat/clear', methods=['POST'])
+def clear_chat_history():
+    try:
+        # Clear chat history
+        session['chat_history'] = []
+        
+        return jsonify({
+            "success": True,
+            "message": "Chat history cleared successfully"
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error clearing chat history: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "message": "Failed to clear chat history"
+        }), 500
+
+# Error handlers
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('error.html', error="Page not found"), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    return render_template('error.html', error="Internal server error"), 500
+
+# Helper functions
+def extract_code_from_markdown(markdown_content):
+    """Extract code from markdown code blocks."""
+    # Check if the content is wrapped in markdown code blocks
+    if "```" not in markdown_content:
+        return markdown_content
+        
+    # Split by code blocks
+    parts = markdown_content.split('```')
+    
+    # If there are at least 3 parts (before, code, after)
+    if len(parts) >= 3:
+        # Get the code part (should be at index 1)
+        code = parts[1]
+        
+        # Remove the language identifier if present
+        if code.find('\n') > 0:
+            code = code[code.find('\n')+1:]
+            
+        return code.strip()
+    
+    return markdown_content
+
+# For local development
 if __name__ == '__main__':
     app.run(debug=True)
