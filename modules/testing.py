@@ -12,7 +12,7 @@ from database import db, Script, TestCase, TestResult
 class TestingModule:
     def __init__(self, api_key, model):
         """Initialize the testing module with API credentials."""
-        self.client = OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=api_key, base_url="https://api.openai.com/v1")
         self.model = model
     
     def generate_test_case(self, script_id, script_content, test_requirements):
