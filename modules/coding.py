@@ -7,7 +7,7 @@ from database import db, Script, ScriptVersion
 class CodingModule:
     def __init__(self, api_key, model):
         """Initialize the coding module with API credentials."""
-        self.client = OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=api_key, base_url="https://api.openai.com/v1")
         self.model = model
         self.dmp = diff_match_patch()
 
