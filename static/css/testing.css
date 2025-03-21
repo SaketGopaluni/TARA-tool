@@ -1,0 +1,169 @@
+/* Styles specific to the Testing module */
+
+/* Test case styling */
+.test-case-container {
+    border: 1px solid #e5e7eb;
+    border-radius: 0.375rem;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+}
+
+.test-case-header {
+    background-color: #f9fafb;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.test-case-title {
+    font-weight: 500;
+    color: #374151;
+}
+
+.test-case-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.test-case-content {
+    padding: 1rem;
+    background-color: #ffffff;
+}
+
+/* Test results styling */
+.test-results {
+    border: 1px solid #e5e7eb;
+    border-radius: 0.375rem;
+    overflow: hidden;
+    margin-top: 1rem;
+}
+
+.test-results-header {
+    background-color: #f9fafb;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e5e7eb;
+    font-weight: 500;
+    color: #374151;
+}
+
+.test-results-content {
+    padding: 1rem;
+    background-color: #ffffff;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.test-output {
+    font-family: 'Fira Code', monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    padding: 0.75rem;
+    background-color: #f8fafc;
+    border-radius: 0.25rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Test status badges */
+.test-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.test-status-passed {
+    background-color: #d1fae5;
+    color: #047857;
+}
+
+.test-status-failed {
+    background-color: #fee2e2;
+    color: #b91c1c;
+}
+
+.test-status-error {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+/* Test execution metrics */
+.test-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.test-metric {
+    background-color: #f9fafb;
+    border-radius: 0.375rem;
+    padding: 1rem;
+    border: 1px solid #e5e7eb;
+}
+
+.test-metric-label {
+    font-size: 0.875rem;
+    color: #6b7280;
+    margin-bottom: 0.25rem;
+}
+
+.test-metric-value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+/* Forms and controls */
+.test-form-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.test-form-col {
+    flex: 1;
+}
+
+.test-form-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: #374151;
+}
+
+.test-form-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+}
+
+.test-form-input:focus {
+    outline: none;
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.3);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .test-form-row {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .test-metric {
+        padding: 0.75rem;
+    }
+    
+    .test-metric-value {
+        font-size: 1rem;
+    }
+}

@@ -1,0 +1,135 @@
+/* Styles specific to the Coding module */
+
+/* Enhanced textarea for code input */
+.code-input {
+    font-family: 'Fira Code', monospace;
+    resize: vertical;
+    min-height: 200px;
+    background-color: #f8fafc;
+    border-radius: 0.375rem;
+    border-color: #e2e8f0;
+    padding: 0.75rem;
+    line-height: 1.5;
+    tab-size: 4;
+}
+
+.code-input:focus {
+    outline: none;
+    border-color: #818cf8;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* Syntax highlighting enhancement */
+.syntax-highlighted {
+    position: relative;
+    margin-top: 1rem;
+}
+
+.syntax-highlighted pre {
+    margin: 0;
+    padding: 0;
+    overflow: auto;
+    border-radius: 0.375rem;
+    background-color: #1e293b;
+}
+
+.syntax-highlighted pre code {
+    padding: 1rem;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+/* Copy code button */
+.copy-button {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #d1d5db;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.copy-button:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+/* Diff viewer */
+.diff-viewer {
+    border-radius: 0.375rem;
+    overflow: hidden;
+    margin-top: 1rem;
+}
+
+.diff-viewer .diff-header {
+    padding: 0.5rem 1rem;
+    background-color: #f3f4f6;
+    border-bottom: 1px solid #e5e7eb;
+    font-weight: 500;
+    color: #374151;
+}
+
+.diff-viewer .diff-content {
+    padding: 0;
+    overflow-x: auto;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.875rem;
+    background-color: #f8fafc;
+}
+
+.diff-viewer .diff-line {
+    padding: 0 1rem;
+    white-space: pre;
+}
+
+.diff-viewer .diff-line-added {
+    background-color: #d1fae5;
+}
+
+.diff-viewer .diff-line-removed {
+    background-color: #fee2e2;
+}
+
+/* Versions list */
+.versions-list {
+    max-height: 300px;
+    overflow-y: auto;
+    border-radius: 0.375rem;
+    border: 1px solid #e5e7eb;
+}
+
+.versions-list-item {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e5e7eb;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.versions-list-item:last-child {
+    border-bottom: none;
+}
+
+.versions-list-item:hover {
+    background-color: #f9fafb;
+}
+
+.versions-list-item.active {
+    background-color: #eff6ff;
+    border-left: 3px solid #3b82f6;
+}
+
+/* Small devices (tablets) */
+@media (max-width: 768px) {
+    .code-input {
+        min-height: 150px;
+    }
+    
+    .syntax-highlighted pre code {
+        font-size: 0.75rem;
+    }
+}
