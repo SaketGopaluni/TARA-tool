@@ -17,11 +17,69 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/python.min.js"></script>
     
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-    {% block styles %}{% endblock %}
+    <style>
+        /* Main styles for TARA Assistant */
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        }
+
+        /* Code highlighting enhancements */
+        pre {
+            padding: 0;
+            margin: 0;
+            overflow-x: auto;
+            border-radius: 0.5rem;
+        }
+
+        pre code {
+            display: block;
+            padding: 1rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+
+        /* Diff styles */
+        .diff-container {
+            overflow-x: auto;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+
+        .diff-line-added {
+            background-color: #e6ffec;
+            color: #22863a;
+        }
+
+        .diff-line-removed {
+            background-color: #ffebe9;
+            color: #cb2431;
+        }
+
+        .diff-code {
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+        }
+
+        /* Fix display of diffs from highlightjs */
+        .hljs-addition {
+            background-color: #e6ffec;
+            color: #22863a;
+            display: block;
+            width: 100%;
+        }
+
+        .hljs-deletion {
+            background-color: #ffebe9;
+            color: #cb2431;
+            display: block;
+            width: 100%;
+        }
+    </style>
     
-    <!-- Favicon -->
-    <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon.ico') }}">
+    {% block styles %}{% endblock %}
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col">
     <!-- Navigation -->
@@ -31,7 +89,9 @@
                 <div class="flex">
                     <div class="flex-shrink-0 flex items-center">
                         <a href="{{ url_for('index') }}" class="flex items-center">
-                            <img class="h-8 w-auto" src="{{ url_for('static', filename='images/logo.svg') }}" alt="TARA Assistant Logo">
+                            <div class="h-10 w-10 bg-purple-600 rounded-md flex items-center justify-center text-white font-bold text-lg">
+                                TARA
+                            </div>
                             <span class="ml-2 text-xl font-bold text-gray-900">TARA Assistant</span>
                         </a>
                     </div>
@@ -100,10 +160,153 @@
     <!-- CSRF Token -->
     <script>
         const csrfToken = "{{ csrf_token() }}";
+        
+        // Utility function for API calls
+        async function apiRequest(url, method, data) {
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            };
+
+            const options = {
+                method: method,
+                headers: headers,
+                credentials: 'same-origin'
+            };
+
+            if (data && (method === 'POST' || method === 'PUT')) {
+                options.body = JSON.stringify(data);
+            }
+
+            try {
+                const response = await fetch(url, options);
+                const jsonResponse = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(jsonResponse.message || 'API request failed');
+                }
+                
+                return jsonResponse;
+            } catch (error) {
+                console.error('API Error:', error);
+                showToast(`Error: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+
+        // Toast notification function
+        function showToast(message, type = 'info') {
+            // Create toast element
+            const toast = document.createElement('div');
+            toast.className = `fixed bottom-4 right-4 p-4 rounded-md shadow-lg z-50 ${
+                type === 'success' ? 'bg-green-500' : 
+                type === 'error' ? 'bg-red-500' : 
+                'bg-blue-500'
+            } text-white`;
+            toast.innerHTML = `
+                <div class="flex items-center">
+                    <span class="mr-2">
+                        ${type === 'success' ? '<i class="fas fa-check-circle"></i>' : 
+                        type === 'error' ? '<i class="fas fa-exclamation-circle"></i>' : 
+                        '<i class="fas fa-info-circle"></i>'}
+                    </span>
+                    <span>${message}</span>
+                </div>
+            `;
+            
+            // Add to DOM
+            document.body.appendChild(toast);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.5s ease';
+                
+                setTimeout(() => {
+                    document.body.removeChild(toast);
+                }, 500);
+            }, 3000);
+        }
+
+        // Function to set up tab switching
+        function setupTabs(tabButtonSelector, tabPaneSelector) {
+            const tabButtons = document.querySelectorAll(tabButtonSelector);
+            const tabPanes = document.querySelectorAll(tabPaneSelector);
+            
+            if (!tabButtons.length || !tabPanes.length) return;
+            
+            tabButtons.forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Get the target tab ID
+                    const tabId = this.id.replace('tab-', 'content-');
+                    
+                    // Deactivate all tabs
+                    tabButtons.forEach(btn => {
+                        btn.classList.remove('border-indigo-500', 'text-indigo-600', 'border-green-500', 'text-green-600', 'border-purple-500', 'text-purple-600');
+                        btn.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                    });
+                    
+                    tabPanes.forEach(pane => {
+                        pane.classList.add('hidden');
+                        pane.classList.remove('active');
+                    });
+                    
+                    // Activate the selected tab
+                    this.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                    
+                    // Apply appropriate colors based on the module
+                    if (this.id.includes('coding')) {
+                        this.classList.add('border-indigo-500', 'text-indigo-600');
+                    } else if (this.id.includes('test')) {
+                        this.classList.add('border-green-500', 'text-green-600');
+                    } else if (this.id.includes('chat')) {
+                        this.classList.add('border-purple-500', 'text-purple-600');
+                    }
+                    
+                    // Show the selected tab content
+                    const tabContent = document.getElementById(tabId);
+                    if (tabContent) {
+                        tabContent.classList.remove('hidden');
+                        tabContent.classList.add('active');
+                    }
+                });
+            });
+        }
+
+        // Copy text to clipboard
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text)
+                .then(() => {
+                    showToast('Copied to clipboard', 'success');
+                })
+                .catch(err => {
+                    console.error('Failed to copy: ', err);
+                    showToast('Failed to copy to clipboard', 'error');
+                });
+        }
+
+        // Mobile menu toggle
+        document.addEventListener('DOMContentLoaded', function() {
+            const mobileMenuButton = document.querySelector('.mobile-menu-button');
+            const mobileMenu = document.querySelector('.mobile-menu');
+
+            if (mobileMenuButton && mobileMenu) {
+                mobileMenuButton.addEventListener('click', function() {
+                    mobileMenu.classList.toggle('hidden');
+                });
+            }
+
+            // Initialize syntax highlighting
+            if (typeof hljs !== 'undefined') {
+                document.querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightElement(block);
+                });
+            }
+        });
     </script>
 
-    <!-- Main JavaScript -->
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
