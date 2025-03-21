@@ -54,6 +54,33 @@ def generate_diff_html(old_text, new_text):
     
     return ''.join(html)
 
+# Helper function for faster diff generation
+def generate_simple_diff_html(old_text, new_text):
+    """Generate a simpler HTML diff that's faster to compute."""
+    old_lines = old_text.splitlines()
+    new_lines = new_text.splitlines()
+    
+    # Use set operations for a faster (though less precise) diff
+    old_set = set(old_lines)
+    new_set = set(new_lines)
+    
+    removed = old_set - new_set
+    added = new_set - old_set
+    
+    html = []
+    for line in old_lines:
+        if line in removed:
+            html.append(f'<div class="diff-line-removed">{line}</div>')
+        elif line in old_set.intersection(new_set):
+            html.append(f'<div>{line}</div>')
+    
+    # Add lines that are in new but not in the output above
+    for line in new_lines:
+        if line in added and f'<div>{line}</div>' not in html:
+            html.append(f'<div class="diff-line-added">{line}</div>')
+    
+    return ''.join(html)
+
 # Response time decorator for debugging
 def timed_response(f):
     @wraps(f)
@@ -176,7 +203,7 @@ def generate_script():
             "message": "Failed to generate script"
         }), 500
 
-# Debug Script API
+# Debug Script API - OPTIMIZED VERSION WITH TIMEOUT FIXES
 @app.route('/api/coding/debug', methods=['POST'])
 @timed_response
 def debug_script():
@@ -195,21 +222,30 @@ def debug_script():
         if not openai_client:
             return jsonify({"success": False, "message": "OpenAI client not initialized"}), 500
         
-        # Debug script using OpenAI
-        system_message = """You are an expert code debugger. Analyze the provided code, identify bugs, errors, 
-        or potential issues, and provide a fixed version along with an explanation of your changes. 
-        Format your response in two parts: first the explanation, then the fixed code. 
-        Start the code section with '### FIXED CODE ###' on its own line."""
+        # For very long scripts, truncate to reduce processing time
+        max_length = 10000  # Character limit to avoid timeouts
+        original_length = len(script_content)
+        if original_length > max_length:
+            script_content = script_content[:max_length] + "\n# Note: Script was truncated due to length"
+            app.logger.warning(f"Script truncated from {original_length} to {max_length} characters to avoid timeout")
+        
+        # Debug script using OpenAI - shortened prompt and reduced tokens for speed
+        system_message = """You are an expert code debugger. Analyze the code briefly, identify key issues, 
+        and provide quick fixes. Be concise. Respond with:
+        1. A very brief explanation (2-3 sentences max)
+        2. The fixed code prefixed with '### FIXED CODE ###'"""
         
         try:
+            # Use reduced tokens and temperature to speed up response
             response = openai_client.chat.completions.create(
                 model=app.config['OPENAI_MODEL'],
                 messages=[
                     {"role": "system", "content": system_message},
-                    {"role": "user", "content": f"Debug this code:\n\n{script_content}"}
+                    {"role": "user", "content": f"Fix this code quickly:\n\n{script_content}"}
                 ],
-                temperature=0.2,
-                max_tokens=3000
+                temperature=0.1,
+                max_tokens=1500,  # Reduced tokens to avoid timeout
+                timeout=8  # Set explicit timeout lower than Vercel's 10s limit
             )
             
             response_content = response.choices[0].message.content.strip()
@@ -223,8 +259,8 @@ def debug_script():
                 # Fallback if the model didn't follow the format
                 explanation, fixed_script = extract_explanation_and_code(response_content)
             
-            # Generate HTML diff
-            diff_html = generate_diff_html(script_content, fixed_script)
+            # Generate simple HTML diff (faster than complex diffing)
+            diff_html = generate_simple_diff_html(script_content, fixed_script)
             
             return jsonify({
                 "success": True,
@@ -236,6 +272,13 @@ def debug_script():
             
         except Exception as e:
             app.logger.error(f"OpenAI API error: {str(e)}")
+            # Return a simplified response for timeout errors
+            if "timeout" in str(e).lower() or "timed out" in str(e).lower():
+                return jsonify({
+                    "success": False,
+                    "error": "The operation timed out. Please try with a smaller script or simpler requirements.",
+                    "message": "Debugging operation timed out"
+                }), 504  # Gateway Timeout status
             return jsonify({
                 "success": False,
                 "error": str(e),
@@ -274,20 +317,29 @@ def modify_script():
         if not openai_client:
             return jsonify({"success": False, "message": "OpenAI client not initialized"}), 500
         
-        # Modify script using OpenAI
+        # For very long scripts, truncate to reduce processing time
+        max_length = 10000  # Character limit to avoid timeouts
+        original_length = len(script_content)
+        if original_length > max_length:
+            script_content = script_content[:max_length] + "\n# Note: Script was truncated due to length"
+            app.logger.warning(f"Script truncated from {original_length} to {max_length} characters to avoid timeout")
+        
+        # Modify script using OpenAI - with reduced prompt length for speed
         system_message = """You are an expert code modifier. Modify the provided code according to the user's request.
-        Format your response in two parts: first explain your changes, then provide the complete modified code.
+        Format your response in two parts: first explain your changes briefly, then provide the complete modified code.
         Start the code section with '### MODIFIED CODE ###' on its own line."""
         
         try:
+            # Use reduced tokens and temperature to speed up response
             response = openai_client.chat.completions.create(
                 model=app.config['OPENAI_MODEL'],
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": f"Modify this code according to this request: '{modification_request}'\n\n{script_content}"}
                 ],
-                temperature=0.2,
-                max_tokens=3000
+                temperature=0.1,
+                max_tokens=1500,  # Reduced tokens to avoid timeout
+                timeout=8  # Set explicit timeout lower than Vercel's 10s limit
             )
             
             response_content = response.choices[0].message.content.strip()
@@ -301,8 +353,8 @@ def modify_script():
                 # Fallback if the model didn't follow the format
                 explanation, modified_script = extract_explanation_and_code(response_content)
             
-            # Generate HTML diff
-            diff_html = generate_diff_html(script_content, modified_script)
+            # Generate simple HTML diff (faster than complex diffing)
+            diff_html = generate_simple_diff_html(script_content, modified_script)
             
             return jsonify({
                 "success": True,
@@ -314,6 +366,13 @@ def modify_script():
             
         except Exception as e:
             app.logger.error(f"OpenAI API error: {str(e)}")
+            # Return a simplified response for timeout errors
+            if "timeout" in str(e).lower() or "timed out" in str(e).lower():
+                return jsonify({
+                    "success": False,
+                    "error": "The operation timed out. Please try with a smaller script or simpler requirements.",
+                    "message": "Modification operation timed out"
+                }), 504  # Gateway Timeout status
             return jsonify({
                 "success": False,
                 "error": str(e),
@@ -349,12 +408,19 @@ def diffcheck():
         if not openai_client:
             return jsonify({"success": False, "message": "OpenAI client not initialized"}), 500
         
+        # For very long inputs, truncate to reduce processing time
+        max_length = 8000  # Character limit to avoid timeouts
+        if len(original_content) > max_length or len(new_content) > max_length:
+            # If either input is too long, fall back to simple diff
+            app.logger.warning("Inputs too long for OpenAI analysis, falling back to simple diff")
+            return make_simple_diff_response(original_content, new_content)
+        
         # Generate diff HTML
-        diff_html = generate_diff_html(original_content, new_content)
+        diff_html = generate_simple_diff_html(original_content, new_content)
         
         # Get explanation of changes using OpenAI
         system_message = """You are an expert code analyzer. Explain the differences between two versions of code.
-        Provide a clear, concise explanation of what has changed and why these changes might have been made."""
+        Provide a clear, concise explanation of what has changed. Be very brief."""
         
         try:
             # Create a simple text representation of the diff for OpenAI
@@ -367,16 +433,20 @@ def diffcheck():
                 if line not in original_content.splitlines():
                     diff_lines.append(f"+ {line}")
             
-            diff_text = "\n".join(diff_lines)
+            # Limit diff text to avoid timeouts
+            diff_text = "\n".join(diff_lines[:200])  # Limit to 200 lines
+            if len(diff_lines) > 200:
+                diff_text += "\n... (additional changes omitted for brevity)"
             
             response = openai_client.chat.completions.create(
                 model=app.config['OPENAI_MODEL'],
                 messages=[
                     {"role": "system", "content": system_message},
-                    {"role": "user", "content": f"Explain these code changes:\n\n{diff_text}"}
+                    {"role": "user", "content": f"Explain these code changes briefly:\n\n{diff_text}"}
                 ],
-                temperature=0.2,
-                max_tokens=1000
+                temperature=0.1,
+                max_tokens=500,  # Very limited tokens for speed
+                timeout=8  # Set explicit timeout lower than Vercel's 10s limit
             )
             
             explanation = response.choices[0].message.content.strip()
@@ -404,7 +474,7 @@ def diffcheck():
 # Fallback for diff checker if OpenAI fails
 def make_simple_diff_response(original_content, new_content):
     """Create a diff response without OpenAI explanation."""
-    diff_html = generate_diff_html(original_content, new_content)
+    diff_html = generate_simple_diff_html(original_content, new_content)
     return jsonify({
         "success": True,
         "explanation": "Comparison completed. Lines in green were added, lines in red were removed.",
@@ -433,7 +503,14 @@ def generate_test_case():
         if not openai_client:
             return jsonify({"success": False, "message": "OpenAI client not initialized"}), 500
         
-        # Generate the test case using OpenAI
+        # For very long scripts, truncate to reduce processing time
+        max_length = 10000  # Character limit to avoid timeouts
+        original_length = len(script_content)
+        if original_length > max_length:
+            script_content = script_content[:max_length] + "\n# Note: Script was truncated due to length"
+            app.logger.warning(f"Script truncated from {original_length} to {max_length} characters to avoid timeout")
+        
+        # Generate the test case using OpenAI - optimized for speed
         system_message = """You are an expert in writing Python unit tests. Create comprehensive test cases 
         for the provided code, following best practices for testing. Include setup, assertions, and error handling.
         Return ONLY the Python test code without any explanations or markdown."""
@@ -445,8 +522,9 @@ def generate_test_case():
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": f"Write unit tests for this code, according to these requirements: '{test_requirements}'\n\n{script_content}"}
                 ],
-                temperature=0.2,
-                max_tokens=3000
+                temperature=0.1,
+                max_tokens=1500,  # Reduced tokens to avoid timeout
+                timeout=8  # Set explicit timeout lower than Vercel's 10s limit
             )
             
             test_content = response.choices[0].message.content.strip()
@@ -472,6 +550,13 @@ def generate_test_case():
             
         except Exception as e:
             app.logger.error(f"OpenAI API error: {str(e)}")
+            # Return a simplified response for timeout errors
+            if "timeout" in str(e).lower() or "timed out" in str(e).lower():
+                return jsonify({
+                    "success": False,
+                    "error": "The operation timed out. Please try with a smaller script or simpler requirements.",
+                    "message": "Test generation operation timed out"
+                }), 504  # Gateway Timeout status
             return jsonify({
                 "success": False,
                 "error": str(e),
@@ -498,6 +583,7 @@ def send_chat_message():
         
         data = request.json
         message = data.get('message')
+        query_type = data.get('query_type', 'general')
         
         if not message:
             return jsonify({"success": False, "message": "Message is required"}), 400
@@ -522,14 +608,36 @@ def send_chat_message():
         chat_history.append({"role": "user", "content": message})
         
         # Limit history length to avoid token limits
-        if len(chat_history) > 20:
-            # Keep the first message (system context) and the 19 most recent messages
-            chat_history = chat_history[-20:]
+        if len(chat_history) > 10:
+            # Keep only the 10 most recent messages for simplicity and speed
+            chat_history = chat_history[-10:]
         
-        # System prompt for automotive cybersecurity
-        system_prompt = """You are an expert in automotive cybersecurity, specializing in Threat Analysis and Risk Assessment (TARA).
-        Provide helpful, accurate information related to automotive cybersecurity, ECUs, threat modeling, and risk assessment.
-        When appropriate, reference industry standards such as ISO 21434, SAE J3061, and related best practices."""
+        # Select the appropriate system prompt based on the message content
+        if "damage scenario" in message.lower() or "cia" in message.lower() or query_type == 'damage_scenario':
+            system_prompt = """You are an expert in automotive cybersecurity damage scenario analysis. 
+            Generate only ONE damage scenario paragraph based on the CIA (Confidentiality, Integrity, Availability) aspects mentioned.
+            
+            After the paragraph, provide impact ratings for SFOP:
+            - Safety Impact (0-4): How this affects human safety
+            - Financial Impact (0-4): Cost implications 
+            - Operational Impact (0-4): Effect on vehicle operations
+            - Privacy Impact (0-4): Implications for data privacy
+            
+            Use this exact format for the ratings:
+            
+            ## SFOP Ratings
+            - Safety Impact: [0-4] - Brief justification
+            - Financial Impact: [0-4] - Brief justification
+            - Operational Impact: [0-4] - Brief justification
+            - Privacy Impact: [0-4] - Brief justification
+            
+            Where 0 = No impact, 1 = Low impact, 2 = Medium impact, 3 = High impact, 4 = Critical impact"""
+        else:
+            # Default system prompt for automotive cybersecurity
+            system_prompt = """You are an expert in automotive cybersecurity, specializing in Threat Analysis and Risk Assessment (TARA).
+            Provide helpful, accurate information related to automotive cybersecurity, ECUs, threat modeling, and risk assessment.
+            When appropriate, reference industry standards such as ISO 21434, SAE J3061, and related best practices.
+            Keep responses concise and to the point."""
         
         # Prepare messages for API call
         openai_messages = [{"role": "system", "content": system_prompt}]
@@ -537,12 +645,13 @@ def send_chat_message():
             openai_messages.append({"role": msg["role"], "content": msg["content"]})
         
         try:
-            # Call OpenAI API
+            # Call OpenAI API with a shorter timeout and reduced tokens
             response = openai_client.chat.completions.create(
                 model=app.config['OPENAI_MODEL'],
                 messages=openai_messages,
                 temperature=0.7,
-                max_tokens=1500  # Reduced token count to avoid timeouts
+                max_tokens=1000,  # Further reduced token count to avoid timeouts
+                timeout=8  # Set explicit timeout below Vercel's 10s limit
             )
             
             assistant_response = response.choices[0].message.content.strip()
@@ -561,6 +670,13 @@ def send_chat_message():
             
         except Exception as e:
             app.logger.error(f"OpenAI API error: {str(e)}")
+            # Special handling for timeout errors
+            if "timeout" in str(e).lower() or "timed out" in str(e).lower():
+                return jsonify({
+                    "success": False,
+                    "error": "The request took too long to process. Please try a shorter message.",
+                    "message": "Request timed out"
+                }), 504  # Gateway Timeout
             return jsonify({
                 "success": False,
                 "error": str(e),
