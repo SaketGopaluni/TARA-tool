@@ -18,8 +18,8 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 
 # Configure the app
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-for-testing')
-app.config['OPENAI_API_KEY'] = os.environ.get('OPENAI_API_KEY')
-app.config['OPENAI_MODEL'] = os.environ.get('OPENAI_MODEL', 'gpt-4o')
+app.config['DEEPSEEK_API_KEY'] = os.environ.get('DEEPSEEK_API_KEY')
+app.config['DEEPSEEK_MODEL'] = os.environ.get('DEEPSEEK_MODEL', 'deepseek-chat')
 app.config['DEBUG'] = os.environ.get('DEBUG', 'False').lower() == 'true'
 
 # Setup CSRF protection
@@ -28,10 +28,10 @@ csrf = CSRFProtect(app)
 # Setup proxy fix for Vercel
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-# Initialize OpenAI client
+# Initialize OpenAI client for DeepSeek
 try:
     from openai import OpenAI
-    openai_client = OpenAI(api_key=app.config['OPENAI_API_KEY'], base_url="https://api.openai.com/v1")
+    openai_client = OpenAI(api_key=app.config['DEEPSEEK_API_KEY'], base_url="https://api.deepseek.com")
 except ImportError:
     app.logger.error("OpenAI package not installed. Please run 'pip install openai'")
     openai_client = None
@@ -126,7 +126,7 @@ def chat():
 
 # API Routes
 
-# Coding API - Generate Script
+# Coding API - Wolves of Wall Street
 @app.route('/api/coding/generate', methods=['POST'])
 @timed_response
 def generate_script():
@@ -142,21 +142,21 @@ def generate_script():
         if not prompt:
             return jsonify({"success": False, "message": "Prompt is required"}), 400
         
-        # Check if OpenAI client is initialized
+        # Check if DeepSeek client is initialized
         if not openai_client:
-            return jsonify({"success": False, "message": "OpenAI client not initialized"}), 500
+            return jsonify({"success": False, "message": "DeepSeek client not initialized"}), 500
         
-        # Generate the script using OpenAI
+        # Generate the script using DeepSeek
         system_message = f"""You are an expert {language} developer specializing in cybersecurity and
         automotive systems. Generate a well-commented, production-ready script based on the user's requirements.
         Focus on security best practices, error handling, and maintainability. Return ONLY the code without any explanations or markdown."""
         
         # Log request for debugging
-        app.logger.info(f"Sending request to OpenAI for script generation: {prompt[:50]}...")
+        app.logger.info(f"Sending request to DeepSeek for script generation: {prompt[:50]}...")
         
         try:
             response = openai_client.chat.completions.create(
-                model=app.config['OPENAI_MODEL'],
+                model=app.config['DEEPSEEK_MODEL'],
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": prompt}
@@ -187,11 +187,11 @@ def generate_script():
             })
             
         except Exception as e:
-            app.logger.error(f"OpenAI API error: {str(e)}")
+            app.logger.error(f"DeepSeek API error: {str(e)}")
             return jsonify({
                 "success": False,
                 "error": str(e),
-                "message": "Error calling OpenAI API. Please try again later."
+                "message": "Error calling DeepSeek API. Please try again later."
             }), 500
             
     except Exception as e:
@@ -218,9 +218,9 @@ def debug_script():
         if not script_content:
             return jsonify({"success": False, "message": "Script content is required"}), 400
         
-        # Check if OpenAI client is initialized
+        # Check if DeepSeek client is initialized
         if not openai_client:
-            return jsonify({"success": False, "message": "OpenAI client not initialized"}), 500
+            return jsonify({"success": False, "message": "DeepSeek client not initialized"}), 500
         
         # For very long scripts, truncate to reduce processing time
         max_length = 10000  # Character limit to avoid timeouts
@@ -229,7 +229,7 @@ def debug_script():
             script_content = script_content[:max_length] + "\n# Note: Script was truncated due to length"
             app.logger.warning(f"Script truncated from {original_length} to {max_length} characters to avoid timeout")
         
-        # Debug script using OpenAI - shortened prompt and reduced tokens for speed
+        # Debug script using DeepSeek - shortened prompt and reduced tokens for speed
         system_message = """You are an expert code debugger. Analyze the code briefly, identify key issues, 
         and provide quick fixes. Be concise. Respond with:
         1. A very brief explanation (2-3 sentences max)
@@ -238,7 +238,7 @@ def debug_script():
         try:
             # Use reduced tokens and temperature to speed up response
             response = openai_client.chat.completions.create(
-                model=app.config['OPENAI_MODEL'],
+                model=app.config['DEEPSEEK_MODEL'],
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": f"Fix this code quickly:\n\n{script_content}"}
@@ -271,7 +271,7 @@ def debug_script():
             })
             
         except Exception as e:
-            app.logger.error(f"OpenAI API error: {str(e)}")
+            app.logger.error(f"DeepSeek API error: {str(e)}")
             # Return a simplified response for timeout errors
             if "timeout" in str(e).lower() or "timed out" in str(e).lower():
                 return jsonify({
@@ -282,7 +282,7 @@ def debug_script():
             return jsonify({
                 "success": False,
                 "error": str(e),
-                "message": "Error calling OpenAI API. Please try again later."
+                "message": "Error calling DeepSeek API. Please try again later."
             }), 500
             
     except Exception as e:
@@ -313,9 +313,9 @@ def modify_script():
         if not modification_request:
             return jsonify({"success": False, "message": "Modification request is required"}), 400
         
-        # Check if OpenAI client is initialized
+        # Check if DeepSeek client is initialized
         if not openai_client:
-            return jsonify({"success": False, "message": "OpenAI client not initialized"}), 500
+            return jsonify({"success": False, "message": "DeepSeek client not initialized"}), 500
         
         # For very long scripts, truncate to reduce processing time
         max_length = 10000  # Character limit to avoid timeouts
@@ -324,7 +324,7 @@ def modify_script():
             script_content = script_content[:max_length] + "\n# Note: Script was truncated due to length"
             app.logger.warning(f"Script truncated from {original_length} to {max_length} characters to avoid timeout")
         
-        # Modify script using OpenAI - with reduced prompt length for speed
+        # Modify script using DeepSeek - with reduced prompt length for speed
         system_message = """You are an expert code modifier. Modify the provided code according to the user's request.
         Format your response in two parts: first explain your changes briefly, then provide the complete modified code.
         Start the code section with '### MODIFIED CODE ###' on its own line."""
@@ -332,7 +332,7 @@ def modify_script():
         try:
             # Use reduced tokens and temperature to speed up response
             response = openai_client.chat.completions.create(
-                model=app.config['OPENAI_MODEL'],
+                model=app.config['DEEPSEEK_MODEL'],
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": f"Modify this code according to this request: '{modification_request}'\n\n{script_content}"}
@@ -365,7 +365,7 @@ def modify_script():
             })
             
         except Exception as e:
-            app.logger.error(f"OpenAI API error: {str(e)}")
+            app.logger.error(f"DeepSeek API error: {str(e)}")
             # Return a simplified response for timeout errors
             if "timeout" in str(e).lower() or "timed out" in str(e).lower():
                 return jsonify({
@@ -376,7 +376,7 @@ def modify_script():
             return jsonify({
                 "success": False,
                 "error": str(e),
-                "message": "Error calling OpenAI API. Please try again later."
+                "message": "Error calling DeepSeek API. Please try again later."
             }), 500
             
     except Exception as e:
@@ -404,26 +404,26 @@ def diffcheck():
         if not original_content or not new_content:
             return jsonify({"success": False, "message": "Both original and new content are required"}), 400
         
-        # Check if OpenAI client is initialized
+        # Check if DeepSeek client is initialized
         if not openai_client:
-            return jsonify({"success": False, "message": "OpenAI client not initialized"}), 500
+            return jsonify({"success": False, "message": "DeepSeek client not initialized"}), 500
         
         # For very long inputs, truncate to reduce processing time
         max_length = 8000  # Character limit to avoid timeouts
         if len(original_content) > max_length or len(new_content) > max_length:
             # If either input is too long, fall back to simple diff
-            app.logger.warning("Inputs too long for OpenAI analysis, falling back to simple diff")
+            app.logger.warning("Inputs too long for DeepSeek analysis, falling back to simple diff")
             return make_simple_diff_response(original_content, new_content)
         
         # Generate diff HTML
         diff_html = generate_simple_diff_html(original_content, new_content)
         
-        # Get explanation of changes using OpenAI
+        # Get explanation of changes using DeepSeek
         system_message = """You are an expert code analyzer. Explain the differences between two versions of code.
         Provide a clear, concise explanation of what has changed. Be very brief."""
         
         try:
-            # Create a simple text representation of the diff for OpenAI
+            # Create a simple text representation of the diff for DeepSeek
             diff_lines = []
             for line in original_content.splitlines():
                 if line not in new_content.splitlines():
@@ -439,7 +439,7 @@ def diffcheck():
                 diff_text += "\n... (additional changes omitted for brevity)"
             
             response = openai_client.chat.completions.create(
-                model=app.config['OPENAI_MODEL'],
+                model=app.config['DEEPSEEK_MODEL'],
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": f"Explain these code changes briefly:\n\n{diff_text}"}
@@ -459,7 +459,7 @@ def diffcheck():
             })
             
         except Exception as e:
-            app.logger.error(f"OpenAI API error: {str(e)}")
+            app.logger.error(f"DeepSeek API error: {str(e)}")
             return make_simple_diff_response(original_content, new_content)
             
     except Exception as e:
@@ -471,9 +471,9 @@ def diffcheck():
             "message": "Failed to compare scripts"
         }), 500
 
-# Fallback for diff checker if OpenAI fails
+# Fallback for diff checker if DeepSeek fails
 def make_simple_diff_response(original_content, new_content):
-    """Create a diff response without OpenAI explanation."""
+    """Create a diff response without DeepSeek explanation."""
     diff_html = generate_simple_diff_html(original_content, new_content)
     return jsonify({
         "success": True,
@@ -499,9 +499,9 @@ def generate_test_case():
         if not script_content or not test_requirements:
             return jsonify({"success": False, "message": "Script content and test requirements are required"}), 400
         
-        # Check if OpenAI client is initialized
+        # Check if DeepSeek client is initialized
         if not openai_client:
-            return jsonify({"success": False, "message": "OpenAI client not initialized"}), 500
+            return jsonify({"success": False, "message": "DeepSeek client not initialized"}), 500
         
         # For very long scripts, truncate to reduce processing time
         max_length = 10000  # Character limit to avoid timeouts
@@ -510,14 +510,14 @@ def generate_test_case():
             script_content = script_content[:max_length] + "\n# Note: Script was truncated due to length"
             app.logger.warning(f"Script truncated from {original_length} to {max_length} characters to avoid timeout")
         
-        # Generate the test case using OpenAI - optimized for speed
+        # Generate the test case using DeepSeek - optimized for speed
         system_message = """You are an expert in writing Python unit tests. Create comprehensive test cases 
         for the provided code, following best practices for testing. Include setup, assertions, and error handling.
         Return ONLY the Python test code without any explanations or markdown."""
         
         try:
             response = openai_client.chat.completions.create(
-                model=app.config['OPENAI_MODEL'],
+                model=app.config['DEEPSEEK_MODEL'],
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": f"Write unit tests for this code, according to these requirements: '{test_requirements}'\n\n{script_content}"}
@@ -549,7 +549,7 @@ def generate_test_case():
             })
             
         except Exception as e:
-            app.logger.error(f"OpenAI API error: {str(e)}")
+            app.logger.error(f"DeepSeek API error: {str(e)}")
             # Return a simplified response for timeout errors
             if "timeout" in str(e).lower() or "timed out" in str(e).lower():
                 return jsonify({
@@ -560,7 +560,7 @@ def generate_test_case():
             return jsonify({
                 "success": False,
                 "error": str(e),
-                "message": "Error calling OpenAI API. Please try again later."
+                "message": "Error calling DeepSeek API. Please try again later."
             }), 500
             
     except Exception as e:
@@ -588,9 +588,9 @@ def send_chat_message():
         if not message:
             return jsonify({"success": False, "message": "Message is required"}), 400
         
-        # Check if OpenAI client is initialized
+        # Check if DeepSeek client is initialized
         if not openai_client:
-            return jsonify({"success": False, "message": "OpenAI client not initialized"}), 500
+            return jsonify({"success": False, "message": "DeepSeek client not initialized"}), 500
         
         # Get or create chat session ID
         chat_session_id = session.get('chat_session_id')
@@ -645,9 +645,9 @@ def send_chat_message():
             openai_messages.append({"role": msg["role"], "content": msg["content"]})
         
         try:
-            # Call OpenAI API with a shorter timeout and reduced tokens
+            # Call DeepSeek API with a shorter timeout and reduced tokens
             response = openai_client.chat.completions.create(
-                model=app.config['OPENAI_MODEL'],
+                model=app.config['DEEPSEEK_MODEL'],
                 messages=openai_messages,
                 temperature=0.7,
                 max_tokens=1000,  # Further reduced token count to avoid timeouts
@@ -669,7 +669,7 @@ def send_chat_message():
             })
             
         except Exception as e:
-            app.logger.error(f"OpenAI API error: {str(e)}")
+            app.logger.error(f"DeepSeek API error: {str(e)}")
             # Special handling for timeout errors
             if "timeout" in str(e).lower() or "timed out" in str(e).lower():
                 return jsonify({
@@ -680,7 +680,7 @@ def send_chat_message():
             return jsonify({
                 "success": False,
                 "error": str(e),
-                "message": "Error calling OpenAI API. Please try again later."
+                "message": "Error calling DeepSeek API. Please try again later."
             }), 500
             
     except Exception as e:
@@ -735,23 +735,23 @@ def clear_chat_history():
 # API Status route
 @app.route('/api/status', methods=['GET'])
 def api_status():
-    """Simple endpoint to check if API is working and has OpenAI access."""
+    """Simple endpoint to check if API is working and has DeepSeek access."""
     try:
         status = {
             "api": "online",
-            "openai": "ready" if openai_client else "not_configured",
+            "deepseek": "ready" if openai_client else "not_configured",
             "environment": "production" if not app.config['DEBUG'] else "development"
         }
         
-        # Add OpenAI connectivity check if client exists
+        # Add DeepSeek connectivity check if client exists
         if openai_client:
             try:
                 # Simple model list call to check connectivity
                 openai_client.models.list()
-                status["openai_connection"] = "connected"
+                status["deepseek_connection"] = "connected"
             except Exception as e:
-                status["openai_connection"] = "error"
-                status["openai_error"] = str(e)
+                status["deepseek_connection"] = "error"
+                status["deepseek_error"] = str(e)
         
         return jsonify({"success": True, "status": status})
     except Exception as e:
