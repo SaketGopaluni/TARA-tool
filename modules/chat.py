@@ -1,12 +1,19 @@
+import os
 import uuid
 from openai import OpenAI
 from database import db, ChatSession, ChatMessage
 
 class ChatModule:
-    def __init__(self, api_key, model):
-        """Initialize the chat module with API credentials."""
-        self.client = OpenAI(api_key=api_key, base_url="https://api.openai.com/v1")
-        self.model = model
+    def __init__(self):
+        """Initialize the chat module with DeepSeek API credentials from environment variable."""
+        # Fetch the API key from the environment variable DEEPSEEK_API_KEY
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        if not api_key:
+            raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
+        
+        # Initialize the OpenAI client with DeepSeek's base URL and API key
+        self.client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        self.model = "deepseek-chat"
         
         # Define prompt templates for different types of queries
         self.prompt_templates = {
@@ -105,7 +112,7 @@ class ChatModule:
             db.session.add(user_message)
             db.session.commit()
             
-            # Call API
+            # Call DeepSeek API
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
