@@ -100,6 +100,28 @@ def timed_response(f):
         return response
     return decorated_function
 
+# Streaming response helper
+def stream_deepseek_response(response_stream):
+    """Stream the DeepSeek response to the client."""
+    try:
+        full_content = ""
+        
+        # Stream each chunk
+        for chunk in response_stream:
+            if chunk.choices:
+                content = chunk.choices[0].delta.content or ""
+                full_content += content
+                
+                # Yield the chunk as a JSON object with a data prefix for EventSource
+                yield f"data: {json.dumps({'chunk': content, 'full': full_content})}\n\n"
+                
+        # Send a completion message
+        yield f"data: {json.dumps({'done': True, 'full': full_content})}\n\n"
+            
+    except Exception as e:
+        app.logger.error(f"Error in stream: {str(e)}")
+        yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
 # Home route
 @app.route('/')
 def index():
@@ -128,20 +150,22 @@ def chat():
 
 # Coding API - Wolves of Wall Street
 @app.route('/api/coding/generate', methods=['POST'])
+@csrf.exempt
 @timed_response
 def generate_script():
     try:
-        # Validate input data
-        if not request.is_json:
-            return jsonify({"success": False, "message": "Invalid request: JSON required"}), 400
-        
-        data = request.json
-        prompt = data.get('prompt')
+        data = request.get_json()
+        prompt = data.get('prompt', '')
         language = data.get('language', 'python')
         
+        # Input validation
         if not prompt:
-            return jsonify({"success": False, "message": "Prompt is required"}), 400
-        
+            return jsonify({
+                "success": False,
+                "error": "Prompt is required",
+                "message": "Please provide a prompt for the script generation"
+            }), 400
+            
         # Check if DeepSeek client is initialized
         if not openai_client:
             return jsonify({"success": False, "message": "DeepSeek client not initialized"}), 500
@@ -150,9 +174,6 @@ def generate_script():
         system_message = f"""You are an expert {language} developer specializing in cybersecurity and
         automotive systems. Generate a well-commented, production-ready script based on the user's requirements.
         Focus on security best practices, error handling, and maintainability. Return ONLY the code without any explanations or markdown."""
-        
-        # Log request for debugging
-        app.logger.info(f"Sending request to DeepSeek for script generation: {prompt[:50]}...")
         
         try:
             response = openai_client.chat.completions.create(
@@ -165,27 +186,39 @@ def generate_script():
                 max_tokens=3000
             )
             
-            script_content = response.choices[0].message.content.strip()
+            # Check if streaming is requested
+            stream = request.args.get('stream', 'false').lower() == 'true'
             
-            # Extract code from markdown code blocks if present
-            if "```" in script_content:
-                script_content = extract_code_from_markdown(script_content)
-            
-            # Create a simple title from the prompt
-            title = prompt.split('\n')[0].strip() if '\n' in prompt else prompt[:50] + "..."
-            
-            # Return the script
-            return jsonify({
-                "success": True,
-                "script": {
-                    "id": str(uuid.uuid4()),  # Generate a fake ID for the script
-                    "title": title,
-                    "content": script_content,
-                    "language": language
-                },
-                "message": "Script generated successfully"
-            })
-            
+            if stream:
+                # Return a streaming response
+                return Response(stream_deepseek_response(response.choices[0].delta.stream()),
+                               mimetype='text/event-stream',
+                               headers={
+                                   'Cache-Control': 'no-cache',
+                                   'X-Accel-Buffering': 'no'
+                               })
+            else:
+                script_content = response.choices[0].message.content.strip()
+                
+                # Extract code from markdown code blocks if present
+                if "```" in script_content:
+                    script_content = extract_code_from_markdown(script_content)
+                    
+                # Create a simple title from the prompt
+                title = prompt.split('\n')[0].strip() if '\n' in prompt else prompt[:50] + "..."
+                
+                # Return the script
+                return jsonify({
+                    "success": True,
+                    "script": {
+                        "id": str(uuid.uuid4()),  # Generate a fake ID for the script
+                        "title": title,
+                        "content": script_content,
+                        "language": language
+                    },
+                    "message": "Script generated successfully"
+                })
+                
         except Exception as e:
             app.logger.error(f"DeepSeek API error: {str(e)}")
             return jsonify({
@@ -205,19 +238,21 @@ def generate_script():
 
 # Debug Script API - OPTIMIZED VERSION WITH TIMEOUT FIXES
 @app.route('/api/coding/debug', methods=['POST'])
+@csrf.exempt
 @timed_response
 def debug_script():
     try:
-        # Validate input data
-        if not request.is_json:
-            return jsonify({"success": False, "message": "Invalid request: JSON required"}), 400
+        data = request.get_json()
+        script_content = data.get('script_content', '')
         
-        data = request.json
-        script_content = data.get('script_content')
-        
+        # Input validation
         if not script_content:
-            return jsonify({"success": False, "message": "Script content is required"}), 400
-        
+            return jsonify({
+                "success": False,
+                "error": "Script content is required",
+                "message": "Please provide the script content"
+            }), 400
+            
         # Check if DeepSeek client is initialized
         if not openai_client:
             return jsonify({"success": False, "message": "DeepSeek client not initialized"}), 500
@@ -248,28 +283,40 @@ def debug_script():
                 timeout=8  # Set explicit timeout lower than Vercel's 10s limit
             )
             
-            response_content = response.choices[0].message.content.strip()
+            # Check if streaming is requested
+            stream = request.args.get('stream', 'false').lower() == 'true'
             
-            # Split explanation and code
-            if "### FIXED CODE ###" in response_content:
-                parts = response_content.split("### FIXED CODE ###", 1)
-                explanation = parts[0].strip()
-                fixed_script = parts[1].strip()
+            if stream:
+                # Return a streaming response
+                return Response(stream_deepseek_response(response.choices[0].delta.stream()),
+                               mimetype='text/event-stream',
+                               headers={
+                                   'Cache-Control': 'no-cache',
+                                   'X-Accel-Buffering': 'no'
+                               })
             else:
-                # Fallback if the model didn't follow the format
-                explanation, fixed_script = extract_explanation_and_code(response_content)
-            
-            # Generate simple HTML diff (faster than complex diffing)
-            diff_html = generate_simple_diff_html(script_content, fixed_script)
-            
-            return jsonify({
-                "success": True,
-                "explanation": explanation,
-                "fixed_script": fixed_script,
-                "diff_html": diff_html,
-                "message": "Script debugged successfully"
-            })
-            
+                response_content = response.choices[0].message.content.strip()
+                
+                # Split explanation and code
+                if "### FIXED CODE ###" in response_content:
+                    parts = response_content.split("### FIXED CODE ###", 1)
+                    explanation = parts[0].strip()
+                    fixed_script = parts[1].strip()
+                else:
+                    # Fallback if the model didn't follow the format
+                    explanation, fixed_script = extract_explanation_and_code(response_content)
+                
+                # Generate simple HTML diff (faster than complex diffing)
+                diff_html = generate_simple_diff_html(script_content, fixed_script)
+                
+                return jsonify({
+                    "success": True,
+                    "explanation": explanation,
+                    "fixed_script": fixed_script,
+                    "diff_html": diff_html,
+                    "message": "Script debugged successfully"
+                })
+                
         except Exception as e:
             app.logger.error(f"DeepSeek API error: {str(e)}")
             # Return a simplified response for timeout errors
@@ -296,23 +343,29 @@ def debug_script():
 
 # Modify Script API
 @app.route('/api/coding/modify', methods=['POST'])
+@csrf.exempt
 @timed_response
 def modify_script():
     try:
-        # Validate input data
-        if not request.is_json:
-            return jsonify({"success": False, "message": "Invalid request: JSON required"}), 400
+        data = request.get_json()
+        script_content = data.get('script_content', '')
+        modification_request = data.get('modification_request', '')
         
-        data = request.json
-        script_content = data.get('script_content')
-        modification_request = data.get('modification_request')
-        
+        # Input validation
         if not script_content:
-            return jsonify({"success": False, "message": "Script content is required"}), 400
-        
+            return jsonify({
+                "success": False,
+                "error": "Script content is required",
+                "message": "Please provide the script content"
+            }), 400
+            
         if not modification_request:
-            return jsonify({"success": False, "message": "Modification request is required"}), 400
-        
+            return jsonify({
+                "success": False,
+                "error": "Modification request is required",
+                "message": "Please provide the modification request"
+            }), 400
+            
         # Check if DeepSeek client is initialized
         if not openai_client:
             return jsonify({"success": False, "message": "DeepSeek client not initialized"}), 500
@@ -342,28 +395,40 @@ def modify_script():
                 timeout=8  # Set explicit timeout lower than Vercel's 10s limit
             )
             
-            response_content = response.choices[0].message.content.strip()
+            # Check if streaming is requested
+            stream = request.args.get('stream', 'false').lower() == 'true'
             
-            # Split explanation and code
-            if "### MODIFIED CODE ###" in response_content:
-                parts = response_content.split("### MODIFIED CODE ###", 1)
-                explanation = parts[0].strip()
-                modified_script = parts[1].strip()
+            if stream:
+                # Return a streaming response
+                return Response(stream_deepseek_response(response.choices[0].delta.stream()),
+                               mimetype='text/event-stream',
+                               headers={
+                                   'Cache-Control': 'no-cache',
+                                   'X-Accel-Buffering': 'no'
+                               })
             else:
-                # Fallback if the model didn't follow the format
-                explanation, modified_script = extract_explanation_and_code(response_content)
-            
-            # Generate simple HTML diff (faster than complex diffing)
-            diff_html = generate_simple_diff_html(script_content, modified_script)
-            
-            return jsonify({
-                "success": True,
-                "explanation": explanation,
-                "modified_script": modified_script,
-                "diff_html": diff_html,
-                "message": "Script modified successfully"
-            })
-            
+                response_content = response.choices[0].message.content.strip()
+                
+                # Split explanation and code
+                if "### MODIFIED CODE ###" in response_content:
+                    parts = response_content.split("### MODIFIED CODE ###", 1)
+                    explanation = parts[0].strip()
+                    modified_script = parts[1].strip()
+                else:
+                    # Fallback if the model didn't follow the format
+                    explanation, modified_script = extract_explanation_and_code(response_content)
+                
+                # Generate simple HTML diff (faster than complex diffing)
+                diff_html = generate_simple_diff_html(script_content, modified_script)
+                
+                return jsonify({
+                    "success": True,
+                    "explanation": explanation,
+                    "modified_script": modified_script,
+                    "diff_html": diff_html,
+                    "message": "Script modified successfully"
+                })
+                
         except Exception as e:
             app.logger.error(f"DeepSeek API error: {str(e)}")
             # Return a simplified response for timeout errors
@@ -484,87 +549,82 @@ def make_simple_diff_response(original_content, new_content):
 
 # Testing API - Generate Test Case
 @app.route('/api/testing/generate', methods=['POST'])
+@csrf.exempt
 @timed_response
 def generate_test_case():
     try:
-        # Validate input data
-        if not request.is_json:
-            return jsonify({"success": False, "message": "Invalid request: JSON required"}), 400
+        data = request.get_json()
+        script_id = data.get('script_id')
+        script_content = data.get('script_content', '')
+        test_requirements = data.get('test_requirements', '')
         
-        data = request.json
-        script_id = data.get('script_id')  # This might be empty for file uploads
-        script_content = data.get('script_content')
-        test_requirements = data.get('test_requirements')
-        
-        if not script_content or not test_requirements:
-            return jsonify({"success": False, "message": "Script content and test requirements are required"}), 400
-        
-        # Check if DeepSeek client is initialized
-        if not openai_client:
-            return jsonify({"success": False, "message": "DeepSeek client not initialized"}), 500
-        
-        # For very long scripts, truncate to reduce processing time
-        max_length = 10000  # Character limit to avoid timeouts
-        original_length = len(script_content)
-        if original_length > max_length:
-            script_content = script_content[:max_length] + "\n# Note: Script was truncated due to length"
-            app.logger.warning(f"Script truncated from {original_length} to {max_length} characters to avoid timeout")
-        
-        # Generate the test case using DeepSeek - optimized for speed
-        system_message = """You are an expert in writing Python unit tests. Create comprehensive test cases 
-        for the provided code, following best practices for testing. Include setup, assertions, and error handling.
-        Return ONLY the Python test code without any explanations or markdown."""
-        
-        try:
-            response = openai_client.chat.completions.create(
-                model=app.config['DEEPSEEK_MODEL'],
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": f"Write unit tests for this code, according to these requirements: '{test_requirements}'\n\n{script_content}"}
-                ],
-                temperature=0.1,
-                max_tokens=1500,  # Reduced tokens to avoid timeout
-                timeout=8  # Set explicit timeout lower than Vercel's 10s limit
-            )
-            
-            test_content = response.choices[0].message.content.strip()
-            
-            # Extract code from markdown code blocks if present
-            if "```" in test_content:
-                test_content = extract_code_from_markdown(test_content)
-            
-            # Create a simple title from the test requirements
-            title = test_requirements.split('\n')[0].strip() if '\n' in test_requirements else test_requirements[:50] + "..."
-            
-            # Return the test case
-            return jsonify({
-                "success": True,
-                "test_case": {
-                    "id": str(uuid.uuid4()),  # Generate a fake ID for the test case
-                    "script_id": script_id,
-                    "title": title,
-                    "content": test_content
-                },
-                "message": "Test case generated successfully"
-            })
-            
-        except Exception as e:
-            app.logger.error(f"DeepSeek API error: {str(e)}")
-            # Return a simplified response for timeout errors
-            if "timeout" in str(e).lower() or "timed out" in str(e).lower():
-                return jsonify({
-                    "success": False,
-                    "error": "The operation timed out. Please try with a smaller script or simpler requirements.",
-                    "message": "Test generation operation timed out"
-                }), 504  # Gateway Timeout status
+        # Input validation
+        if not script_content:
             return jsonify({
                 "success": False,
-                "error": str(e),
-                "message": "Error calling DeepSeek API. Please try again later."
-            }), 500
+                "error": "Script content is required",
+                "message": "Please provide the script content"
+            }), 400
+            
+        if not test_requirements:
+            return jsonify({
+                "success": False,
+                "error": "Test requirements are required",
+                "message": "Please provide the test requirements"
+            }), 400
+            
+        # Initialize the testing module with DeepSeek credentials
+        testing_module = TestingModule(
+            api_key=app.config['DEEPSEEK_API_KEY'],
+            model=app.config['DEEPSEEK_MODEL']
+        )
+        
+        # Generate test case
+        result = testing_module.generate_test_case(script_id, script_content, test_requirements)
+        
+        # Check if streaming is requested
+        stream = request.args.get('stream', 'false').lower() == 'true'
+        
+        if result.get("success"):
+            if stream and 'stream' in result:
+                # Return a streaming response
+                return Response(stream_deepseek_response(result['stream']), 
+                               mimetype='text/event-stream',
+                               headers={
+                                   'Cache-Control': 'no-cache',
+                                   'X-Accel-Buffering': 'no'
+                               })
+            else:
+                # Handle the streaming response ourselves and return a normal response
+                full_content = ""
+                for chunk in result['stream']:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        full_content += chunk.choices[0].delta.content
+                
+                # Extract code from markdown if present
+                if full_content.startswith("```") and full_content.endswith("```"):
+                    full_content = extract_code_from_markdown(full_content)
+                
+                # Create database entry
+                title = result['title']
+                test_case = TestCase(
+                    script_id=script_id,
+                    title=title,
+                    content=full_content
+                )
+                db.session.add(test_case)
+                db.session.commit()
+                
+                return jsonify({
+                    "success": True,
+                    "test_case": test_case.to_dict(),
+                    "message": "Test case generated successfully"
+                })
+        else:
+            return jsonify(result), 500
             
     except Exception as e:
-        app.logger.error(f"Error generating test case: {str(e)}")
+        app.logger.error(f"Error in generate_test_case: {str(e)}")
         app.logger.error(traceback.format_exc())
         return jsonify({
             "success": False,
@@ -572,119 +632,179 @@ def generate_test_case():
             "message": "Failed to generate test case"
         }), 500
 
+# Testing API - Improve Test Case
+@app.route('/api/testing/improve', methods=['POST'])
+@csrf.exempt
+@timed_response
+def improve_test_case():
+    try:
+        data = request.get_json()
+        test_case_id = data.get('test_case_id')
+        test_content = data.get('test_content', '')
+        script_content = data.get('script_content', '')
+        test_result_output = data.get('test_result_output', '')
+        
+        # Input validation
+        if not test_case_id:
+            return jsonify({
+                "success": False,
+                "error": "Test case ID is required",
+                "message": "Please provide the test case ID"
+            }), 400
+            
+        if not test_content:
+            return jsonify({
+                "success": False,
+                "error": "Test content is required",
+                "message": "Please provide the test content"
+            }), 400
+            
+        if not script_content:
+            return jsonify({
+                "success": False,
+                "error": "Script content is required",
+                "message": "Please provide the script content"
+            }), 400
+            
+        # Initialize the testing module with DeepSeek credentials
+        testing_module = TestingModule(
+            api_key=app.config['DEEPSEEK_API_KEY'],
+            model=app.config['DEEPSEEK_MODEL']
+        )
+        
+        # Improve test case
+        result = testing_module.improve_test_case(test_case_id, test_content, script_content, test_result_output)
+        
+        # Check if streaming is requested
+        stream = request.args.get('stream', 'false').lower() == 'true'
+        
+        if result.get("success"):
+            if stream and 'stream' in result:
+                # Return a streaming response
+                return Response(stream_deepseek_response(result['stream']), 
+                               mimetype='text/event-stream',
+                               headers={
+                                   'Cache-Control': 'no-cache',
+                                   'X-Accel-Buffering': 'no'
+                               })
+            else:
+                # Handle the streaming response ourselves and return a normal response
+                full_content = ""
+                for chunk in result['stream']:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        full_content += chunk.choices[0].delta.content
+                
+                # Extract code from markdown if present
+                if full_content.startswith("```") and full_content.endswith("```"):
+                    full_content = extract_code_from_markdown(full_content)
+                
+                # Update the test case in the database
+                test_case = TestCase.query.get(test_case_id)
+                
+                if not test_case:
+                    return jsonify({
+                        "success": False,
+                        "error": "Test case not found",
+                        "message": "Failed to improve test case: Test case not found"
+                    }), 404
+                
+                # Update the test case content
+                test_case.content = full_content
+                db.session.commit()
+                
+                return jsonify({
+                    "success": True,
+                    "test_case": test_case.to_dict(),
+                    "message": "Test case improved successfully"
+                })
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        app.logger.error(f"Error in improve_test_case: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "message": "Failed to improve test case"
+        }), 500
+
 # Chat API - Send Message
 @app.route('/api/chat/send', methods=['POST'])
+@csrf.exempt
 @timed_response
 def send_chat_message():
     try:
-        # Validate input data
-        if not request.is_json:
-            return jsonify({"success": False, "message": "Invalid request: JSON required"}), 400
-        
-        data = request.json
-        message = data.get('message')
+        data = request.get_json()
+        message = data.get('message', '')
         query_type = data.get('query_type', 'general')
         
+        # Input validation
         if not message:
-            return jsonify({"success": False, "message": "Message is required"}), 400
-        
-        # Check if DeepSeek client is initialized
-        if not openai_client:
-            return jsonify({"success": False, "message": "DeepSeek client not initialized"}), 500
-        
-        # Get or create chat session ID
-        chat_session_id = session.get('chat_session_id')
-        if not chat_session_id:
-            chat_session_id = str(uuid.uuid4())
-            session['chat_session_id'] = chat_session_id
-        
-        # Initialize or get chat history
-        if 'chat_history' not in session:
-            session['chat_history'] = []
-        
-        chat_history = session.get('chat_history', [])
-        
-        # Add user message to history
-        chat_history.append({"role": "user", "content": message})
-        
-        # Limit history length to avoid token limits
-        if len(chat_history) > 10:
-            # Keep only the 10 most recent messages for simplicity and speed
-            chat_history = chat_history[-10:]
-        
-        # Select the appropriate system prompt based on the message content
-        if "damage scenario" in message.lower() or "cia" in message.lower() or query_type == 'damage_scenario':
-            system_prompt = """You are an expert in automotive cybersecurity damage scenario analysis. 
-            Generate only ONE damage scenario paragraph based on the CIA (Confidentiality, Integrity, Availability) aspects mentioned.
-            
-            After the paragraph, provide impact ratings for SFOP:
-            - Safety Impact (0-4): How this affects human safety
-            - Financial Impact (0-4): Cost implications 
-            - Operational Impact (0-4): Effect on vehicle operations
-            - Privacy Impact (0-4): Implications for data privacy
-            
-            Use this exact format for the ratings:
-            
-            ## SFOP Ratings
-            - Safety Impact: [0-4] - Brief justification
-            - Financial Impact: [0-4] - Brief justification
-            - Operational Impact: [0-4] - Brief justification
-            - Privacy Impact: [0-4] - Brief justification
-            
-            Where 0 = No impact, 1 = Low impact, 2 = Medium impact, 3 = High impact, 4 = Critical impact"""
-        else:
-            # Default system prompt for automotive cybersecurity
-            system_prompt = """You are an expert in automotive cybersecurity, specializing in Threat Analysis and Risk Assessment (TARA).
-            Provide helpful, accurate information related to automotive cybersecurity, ECUs, threat modeling, and risk assessment.
-            When appropriate, reference industry standards such as ISO 21434, SAE J3061, and related best practices.
-            Keep responses concise and to the point."""
-        
-        # Prepare messages for API call
-        openai_messages = [{"role": "system", "content": system_prompt}]
-        for msg in chat_history:
-            openai_messages.append({"role": msg["role"], "content": msg["content"]})
-        
-        try:
-            # Call DeepSeek API with a shorter timeout and reduced tokens
-            response = openai_client.chat.completions.create(
-                model=app.config['DEEPSEEK_MODEL'],
-                messages=openai_messages,
-                temperature=0.7,
-                max_tokens=1000,  # Further reduced token count to avoid timeouts
-                timeout=8  # Set explicit timeout below Vercel's 10s limit
-            )
-            
-            assistant_response = response.choices[0].message.content.strip()
-            
-            # Add assistant response to history
-            chat_history.append({"role": "assistant", "content": assistant_response})
-            
-            # Update session
-            session['chat_history'] = chat_history
-            
-            return jsonify({
-                "success": True,
-                "response": assistant_response,
-                "message": "Message sent successfully"
-            })
-            
-        except Exception as e:
-            app.logger.error(f"DeepSeek API error: {str(e)}")
-            # Special handling for timeout errors
-            if "timeout" in str(e).lower() or "timed out" in str(e).lower():
-                return jsonify({
-                    "success": False,
-                    "error": "The request took too long to process. Please try a shorter message.",
-                    "message": "Request timed out"
-                }), 504  # Gateway Timeout
             return jsonify({
                 "success": False,
-                "error": str(e),
-                "message": "Error calling DeepSeek API. Please try again later."
-            }), 500
+                "error": "Message is required",
+                "message": "Please provide a message"
+            }), 400
+            
+        # Get session ID from session or create new
+        session_id = session.get('chat_session_id')
+        if not session_id:
+            session_id = str(uuid.uuid4())
+            session['chat_session_id'] = session_id
+            
+        # Initialize the chat module
+        chat_module = ChatModule()
+        
+        # Create session if it doesn't exist
+        result = chat_module.create_session()
+        if not result['success']:
+            # If creation failed but not because it already exists
+            if "already exists" not in result.get('message', ''):
+                return jsonify(result), 500
+                
+        # Send the message
+        result = chat_module.send_message(session_id, message, query_type)
+        
+        # Check if streaming is requested
+        stream = request.args.get('stream', 'false').lower() == 'true'
+        
+        if result.get("success"):
+            if stream and 'stream' in result:
+                # Return a streaming response
+                return Response(stream_deepseek_response(result['stream']), 
+                               mimetype='text/event-stream',
+                               headers={
+                                   'Cache-Control': 'no-cache',
+                                   'X-Accel-Buffering': 'no'
+                               })
+            else:
+                # Handle the streaming response ourselves and return a normal response
+                full_content = ""
+                for chunk in result['stream']:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        full_content += chunk.choices[0].delta.content
+                
+                # Save assistant response to database
+                chat_session_id = result['chat_session_id']
+                assistant_message = ChatMessage(
+                    session_id=chat_session_id,
+                    role="assistant",
+                    content=full_content
+                )
+                db.session.add(assistant_message)
+                db.session.commit()
+                
+                return jsonify({
+                    "success": True,
+                    "response": full_content,
+                    "message": "Message sent successfully"
+                })
+        else:
+            return jsonify(result), 500
             
     except Exception as e:
-        app.logger.error(f"Error sending chat message: {str(e)}")
+        app.logger.error(f"Error in send_chat_message: {str(e)}")
         app.logger.error(traceback.format_exc())
         return jsonify({
             "success": False,
