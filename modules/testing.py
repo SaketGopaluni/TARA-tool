@@ -11,7 +11,7 @@ from database import db, Script, TestCase, TestResult
 from flask import current_app
 
 class TestingModule:
-    def __init__(self, api_key=None, model=None, app=None):
+    def __init__(self, api_key=None, model=None, app=None, timeout=5.0):
         """Initialize the testing module with API credentials."""
         # Store Flask app reference if provided
         self.app = app
@@ -28,7 +28,11 @@ class TestingModule:
             raise ValueError("DEEPSEEK_API_KEY not set in environment or app config")
             
         # Initialize the OpenAI client with DeepSeek's base URL and API key
-        self.client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        self.client = OpenAI(
+            api_key=api_key, 
+            base_url="https://api.deepseek.com",
+            timeout=timeout
+        )
         self.model = model
     
     def generate_test_case(self, script_id, script_content, test_requirements):
@@ -54,8 +58,8 @@ class TestingModule:
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": f"Write unit tests for the following code, according to these requirements: '{test_requirements}'\n\n{script_content}"}
                 ],
-                temperature=0.2,
-                max_tokens=4000,
+                temperature=0.1,  # Lower temperature for faster, more consistent responses
+                max_tokens=2000,  # Limit token length to avoid timeouts
                 stream=True
             )
             
@@ -214,8 +218,8 @@ class TestingModule:
                     
                     Please provide an improved version of the test case that addresses any issues."""}
                 ],
-                temperature=0.2,
-                max_tokens=4000,
+                temperature=0.1,  # Lower temperature for faster, more consistent responses
+                max_tokens=2000,  # Limit token length to avoid timeouts
                 stream=True
             )
             
