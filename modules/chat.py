@@ -78,7 +78,7 @@ class ChatModule:
             query_type (str): Type of query (ecu_explanation, damage_scenario, threat_scenario, attack_pattern, general)
         
         Returns:
-            dict: Assistant response
+            dict: Assistant response or a generator if streaming is enabled
         """
         try:
             # Get the chat session
@@ -91,19 +91,7 @@ class ChatModule:
                     "message": "Failed to send message: Chat session not found"
                 }
             
-            # Get conversation history
-            history = [{"role": msg.role, "content": msg.content} 
-                       for msg in ChatMessage.query.filter_by(session_id=chat_session.id).order_by(ChatMessage.created_at).all()]
-            
-            # Select system prompt based on query type
-            system_prompt = self.prompt_templates.get(query_type, self.prompt_templates["general"])
-            
-            # Prepare messages for API call
-            messages = [{"role": "system", "content": system_prompt}]
-            messages.extend(history)
-            messages.append({"role": "user", "content": message})
-            
-            # Save user message to database
+            # Create database entry for user message
             user_message = ChatMessage(
                 session_id=chat_session.id,
                 role="user",
@@ -112,29 +100,34 @@ class ChatModule:
             db.session.add(user_message)
             db.session.commit()
             
-            # Call DeepSeek API
+            # Get the prompt template for the query type
+            system_content = self.prompt_templates.get(query_type, self.prompt_templates["general"])
+            
+            # Get previous messages
+            previous_messages = ChatMessage.query.filter_by(session_id=chat_session.id).order_by(ChatMessage.created_at).all()
+            
+            # Format messages for DeepSeek API
+            messages = [{"role": "system", "content": system_content}]
+            
+            # Add previous messages (limited to last 10 for context management)
+            for msg in previous_messages[-10:]:
+                messages.append({"role": msg.role, "content": msg.content})
+            
+            # Generate response
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 temperature=0.7,
-                max_tokens=2000
+                max_tokens=2000,
+                stream=True
             )
             
-            assistant_response = response.choices[0].message.content.strip()
-            
-            # Save assistant response to database
-            assistant_message = ChatMessage(
-                session_id=chat_session.id,
-                role="assistant",
-                content=assistant_response
-            )
-            db.session.add(assistant_message)
-            db.session.commit()
-            
+            # Return the streaming response and session info
             return {
                 "success": True,
-                "response": assistant_response,
-                "message": "Message sent successfully"
+                "stream": response,
+                "session_id": session_id,
+                "chat_session_id": chat_session.id
             }
             
         except Exception as e:
