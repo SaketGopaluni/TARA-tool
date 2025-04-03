@@ -9,6 +9,9 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 import traceback
 from functools import wraps
+from modules.chat import ChatModule
+from modules.testing import TestingModule
+from modules.coding import CodingModule
 
 # Load environment variables
 load_dotenv()
