@@ -12,6 +12,7 @@ from functools import wraps
 from modules.chat import ChatModule
 from modules.testing import TestingModule
 from modules.coding import CodingModule
+from database import db, ChatSession, ChatMessage, Script, ScriptVersion, TestCase, TestResult
 
 # Load environment variables
 load_dotenv()
@@ -24,6 +25,11 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-for-testing')
 app.config['DEEPSEEK_API_KEY'] = os.environ.get('DEEPSEEK_API_KEY')
 app.config['DEEPSEEK_MODEL'] = os.environ.get('DEEPSEEK_MODEL', 'deepseek-chat')
 app.config['DEBUG'] = os.environ.get('DEBUG', 'False').lower() == 'true'
+
+# Setup database
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///tara.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db.init_app(app)
 
 # Setup CSRF protection
 csrf = CSRFProtect(app)
@@ -260,83 +266,55 @@ def debug_script():
         if not openai_client:
             return jsonify({"success": False, "message": "DeepSeek client not initialized"}), 500
         
-        # For very long scripts, truncate to reduce processing time
-        max_length = 10000  # Character limit to avoid timeouts
-        original_length = len(script_content)
-        if original_length > max_length:
-            script_content = script_content[:max_length] + "\n# Note: Script was truncated due to length"
-            app.logger.warning(f"Script truncated from {original_length} to {max_length} characters to avoid timeout")
+        # Initialize the coding module with the Flask app
+        coding_module = CodingModule(app)
         
-        # Debug script using DeepSeek - shortened prompt and reduced tokens for speed
-        system_message = """You are an expert code debugger. Analyze the code briefly, identify key issues, 
-        and provide quick fixes. Be concise. Respond with:
-        1. A very brief explanation (2-3 sentences max)
-        2. The fixed code prefixed with '### FIXED CODE ###'"""
+        # Debug the script
+        result = coding_module.debug_script(None, script_content)
         
-        try:
-            # Use reduced tokens and temperature to speed up response
-            response = openai_client.chat.completions.create(
-                model=app.config['DEEPSEEK_MODEL'],
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": f"Fix this code quickly:\n\n{script_content}"}
-                ],
-                temperature=0.1,
-                max_tokens=1500,  # Reduced tokens to avoid timeout
-                timeout=8  # Set explicit timeout lower than Vercel's 10s limit
-            )
-            
-            # Check if streaming is requested
-            stream = request.args.get('stream', 'false').lower() == 'true'
-            
-            if stream:
+        # Check if streaming is requested
+        stream = request.args.get('stream', 'false').lower() == 'true'
+        
+        if result.get("success"):
+            if stream and 'stream' in result:
                 # Return a streaming response
-                return Response(stream_deepseek_response(response.choices[0].delta.stream()),
+                return Response(stream_deepseek_response(result['stream']), 
                                mimetype='text/event-stream',
                                headers={
                                    'Cache-Control': 'no-cache',
                                    'X-Accel-Buffering': 'no'
                                })
             else:
-                response_content = response.choices[0].message.content.strip()
+                # Handle the streaming response ourselves and return a normal response
+                full_content = ""
+                for chunk in result['stream']:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        full_content += chunk.choices[0].delta.content
                 
-                # Split explanation and code
-                if "### FIXED CODE ###" in response_content:
-                    parts = response_content.split("### FIXED CODE ###", 1)
-                    explanation = parts[0].strip()
-                    fixed_script = parts[1].strip()
-                else:
-                    # Fallback if the model didn't follow the format
-                    explanation, fixed_script = extract_explanation_and_code(response_content)
+                # Extract code from markdown if present
+                if full_content.startswith("```") and full_content.endswith("```"):
+                    full_content = extract_code_from_markdown(full_content)
                 
-                # Generate simple HTML diff (faster than complex diffing)
-                diff_html = generate_simple_diff_html(script_content, fixed_script)
+                # Create database entry
+                title = result['title']
+                test_case = TestCase(
+                    script_id=None,
+                    title=title,
+                    content=full_content
+                )
+                db.session.add(test_case)
+                db.session.commit()
                 
                 return jsonify({
                     "success": True,
-                    "explanation": explanation,
-                    "fixed_script": fixed_script,
-                    "diff_html": diff_html,
+                    "test_case": test_case.to_dict(),
                     "message": "Script debugged successfully"
                 })
-                
-        except Exception as e:
-            app.logger.error(f"DeepSeek API error: {str(e)}")
-            # Return a simplified response for timeout errors
-            if "timeout" in str(e).lower() or "timed out" in str(e).lower():
-                return jsonify({
-                    "success": False,
-                    "error": "The operation timed out. Please try with a smaller script or simpler requirements.",
-                    "message": "Debugging operation timed out"
-                }), 504  # Gateway Timeout status
-            return jsonify({
-                "success": False,
-                "error": str(e),
-                "message": "Error calling DeepSeek API. Please try again later."
-            }), 500
+        else:
+            return jsonify(result), 500
             
     except Exception as e:
-        app.logger.error(f"Error debugging script: {str(e)}")
+        app.logger.error(f"Error in debug_script: {str(e)}")
         app.logger.error(traceback.format_exc())
         return jsonify({
             "success": False,
@@ -373,82 +351,55 @@ def modify_script():
         if not openai_client:
             return jsonify({"success": False, "message": "DeepSeek client not initialized"}), 500
         
-        # For very long scripts, truncate to reduce processing time
-        max_length = 10000  # Character limit to avoid timeouts
-        original_length = len(script_content)
-        if original_length > max_length:
-            script_content = script_content[:max_length] + "\n# Note: Script was truncated due to length"
-            app.logger.warning(f"Script truncated from {original_length} to {max_length} characters to avoid timeout")
+        # Initialize the coding module with the Flask app
+        coding_module = CodingModule(app)
         
-        # Modify script using DeepSeek - with reduced prompt length for speed
-        system_message = """You are an expert code modifier. Modify the provided code according to the user's request.
-        Format your response in two parts: first explain your changes briefly, then provide the complete modified code.
-        Start the code section with '### MODIFIED CODE ###' on its own line."""
+        # Modify the script
+        result = coding_module.modify_script(None, script_content, modification_request)
         
-        try:
-            # Use reduced tokens and temperature to speed up response
-            response = openai_client.chat.completions.create(
-                model=app.config['DEEPSEEK_MODEL'],
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": f"Modify this code according to this request: '{modification_request}'\n\n{script_content}"}
-                ],
-                temperature=0.1,
-                max_tokens=1500,  # Reduced tokens to avoid timeout
-                timeout=8  # Set explicit timeout lower than Vercel's 10s limit
-            )
-            
-            # Check if streaming is requested
-            stream = request.args.get('stream', 'false').lower() == 'true'
-            
-            if stream:
+        # Check if streaming is requested
+        stream = request.args.get('stream', 'false').lower() == 'true'
+        
+        if result.get("success"):
+            if stream and 'stream' in result:
                 # Return a streaming response
-                return Response(stream_deepseek_response(response.choices[0].delta.stream()),
+                return Response(stream_deepseek_response(result['stream']), 
                                mimetype='text/event-stream',
                                headers={
                                    'Cache-Control': 'no-cache',
                                    'X-Accel-Buffering': 'no'
                                })
             else:
-                response_content = response.choices[0].message.content.strip()
+                # Handle the streaming response ourselves and return a normal response
+                full_content = ""
+                for chunk in result['stream']:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        full_content += chunk.choices[0].delta.content
                 
-                # Split explanation and code
-                if "### MODIFIED CODE ###" in response_content:
-                    parts = response_content.split("### MODIFIED CODE ###", 1)
-                    explanation = parts[0].strip()
-                    modified_script = parts[1].strip()
-                else:
-                    # Fallback if the model didn't follow the format
-                    explanation, modified_script = extract_explanation_and_code(response_content)
+                # Extract code from markdown if present
+                if full_content.startswith("```") and full_content.endswith("```"):
+                    full_content = extract_code_from_markdown(full_content)
                 
-                # Generate simple HTML diff (faster than complex diffing)
-                diff_html = generate_simple_diff_html(script_content, modified_script)
+                # Create database entry
+                title = result['title']
+                test_case = TestCase(
+                    script_id=None,
+                    title=title,
+                    content=full_content
+                )
+                db.session.add(test_case)
+                db.session.commit()
                 
                 return jsonify({
                     "success": True,
-                    "explanation": explanation,
-                    "modified_script": modified_script,
-                    "diff_html": diff_html,
+                    "test_case": test_case.to_dict(),
                     "message": "Script modified successfully"
                 })
-                
-        except Exception as e:
-            app.logger.error(f"DeepSeek API error: {str(e)}")
-            # Return a simplified response for timeout errors
-            if "timeout" in str(e).lower() or "timed out" in str(e).lower():
-                return jsonify({
-                    "success": False,
-                    "error": "The operation timed out. Please try with a smaller script or simpler requirements.",
-                    "message": "Modification operation timed out"
-                }), 504  # Gateway Timeout status
-            return jsonify({
-                "success": False,
-                "error": str(e),
-                "message": "Error calling DeepSeek API. Please try again later."
-            }), 500
+        else:
+            return jsonify(result), 500
             
     except Exception as e:
-        app.logger.error(f"Error modifying script: {str(e)}")
+        app.logger.error(f"Error in modify_script: {str(e)}")
         app.logger.error(traceback.format_exc())
         return jsonify({
             "success": False,
@@ -576,11 +527,8 @@ def generate_test_case():
                 "message": "Please provide the test requirements"
             }), 400
             
-        # Initialize the testing module with DeepSeek credentials
-        testing_module = TestingModule(
-            api_key=app.config['DEEPSEEK_API_KEY'],
-            model=app.config['DEEPSEEK_MODEL']
-        )
+        # Initialize the testing module with DeepSeek credentials and Flask app
+        testing_module = TestingModule(app=app, api_key=app.config['DEEPSEEK_API_KEY'], model=app.config['DEEPSEEK_MODEL'])
         
         # Generate test case
         result = testing_module.generate_test_case(script_id, script_content, test_requirements)
@@ -669,11 +617,8 @@ def improve_test_case():
                 "message": "Please provide the script content"
             }), 400
             
-        # Initialize the testing module with DeepSeek credentials
-        testing_module = TestingModule(
-            api_key=app.config['DEEPSEEK_API_KEY'],
-            model=app.config['DEEPSEEK_MODEL']
-        )
+        # Initialize the testing module with DeepSeek credentials and Flask app
+        testing_module = TestingModule(app=app, api_key=app.config['DEEPSEEK_API_KEY'], model=app.config['DEEPSEEK_MODEL'])
         
         # Improve test case
         result = testing_module.improve_test_case(test_case_id, test_content, script_content, test_result_output)
@@ -756,8 +701,8 @@ def send_chat_message():
             session_id = str(uuid.uuid4())
             session['chat_session_id'] = session_id
             
-        # Initialize the chat module
-        chat_module = ChatModule()
+        # Initialize the chat module with the Flask app
+        chat_module = ChatModule(app)
         
         # Create session if it doesn't exist
         result = chat_module.create_session()
