@@ -1,438 +1,563 @@
 // JavaScript for the Coding Module
 
-document.addEventListener('DOMContentLoaded', function() {
-    // Set up tab switching
-    setupTabs('.tab-button', '.tab-pane');
-    
-    // Initialize variables
-    let scripts = [];
-    
-    // Elements for Generate Script
-    const generateForm = document.getElementById('generate-form');
-    const generateResult = document.getElementById('generate-result');
-    const generateCode = document.getElementById('generate-code');
-    const generateTitle = document.getElementById('generate-title');
-    const copyGenerateButton = document.getElementById('copy-generate-result');
-    
-    // Elements for Debug Script
-    const debugForm = document.getElementById('debug-form');
-    const debugSelectScript = document.getElementById('debug-select-script');
-    const debugContent = document.getElementById('debug-content');
-    const debugScriptId = document.getElementById('debug-script-id');
-    const debugResult = document.getElementById('debug-result');
-    const debugCode = document.getElementById('debug-code');
-    const debugExplanation = document.getElementById('debug-explanation');
-    const debugDiff = document.getElementById('debug-diff');
-    const copyDebugButton = document.getElementById('copy-debug-result');
-    
-    // Elements for Modify Script
-    const modifyForm = document.getElementById('modify-form');
-    const modifySelectScript = document.getElementById('modify-select-script');
-    const modifyContent = document.getElementById('modify-content');
-    const modifyScriptId = document.getElementById('modify-script-id');
-    const modifyResult = document.getElementById('modify-result');
-    const modifyCode = document.getElementById('modify-code');
-    const modifyExplanation = document.getElementById('modify-explanation');
-    const modifyDiff = document.getElementById('modify-diff');
-    const copyModifyButton = document.getElementById('copy-modify-result');
-    
-    // Elements for Compare Versions
-    const compareForm = document.getElementById('compare-form');
-    const compareSelectScript = document.getElementById('compare-select-script');
-    const compareVersion1 = document.getElementById('compare-version1');
-    const compareVersion2 = document.getElementById('compare-version2');
-    const compareResult = document.getElementById('compare-result');
-    const compareExplanation = document.getElementById('compare-explanation');
-    const compareDiff = document.getElementById('compare-diff');
-    
-    // Load scripts
-    loadScripts();
-    
-    // Generate Script Form Submit
-    if (generateForm) {
-        generateForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            // Show loading state
-            generateForm.querySelector('button[type="submit"]').disabled = true;
-            generateForm.querySelector('button[type="submit"]').innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Generating...';
-            
-            // Get form data
-            const prompt = document.getElementById('prompt').value;
-            const language = document.getElementById('language').value;
-            
-            try {
-                const result = await apiRequest('/api/coding/generate', 'POST', { prompt, language });
-                
-                if (result.success) {
-                    // Update the UI with the generated script
-                    generateTitle.textContent = result.script.title;
-                    generateCode.textContent = result.script.content;
-                    generateCode.className = `language-${language}`;
-                    
-                    // Highlight the code
-                    hljs.highlightElement(generateCode);
-                    
-                    // Show the result
-                    generateResult.classList.remove('hidden');
-                    
-                    // Refresh the script list
-                    loadScripts();
-                    
-                    // Scroll to the result
-                    generateResult.scrollIntoView({ behavior: 'smooth' });
-                    
-                    showToast('Script generated successfully!', 'success');
-                } else {
-                    showToast(result.message || 'Failed to generate script', 'error');
-                }
-            } catch (error) {
-                showToast(`Error: ${error.message}`, 'error');
-            } finally {
-                // Reset loading state
-                generateForm.querySelector('button[type="submit"]').disabled = false;
-                generateForm.querySelector('button[type="submit"]').innerHTML = 'Generate Script';
-            }
-        });
-    }
-    
-    // Debug Script Form Submit
-    if (debugForm) {
-        debugForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            // Show loading state
-            debugForm.querySelector('button[type="submit"]').disabled = true;
-            debugForm.querySelector('button[type="submit"]').innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Debugging...';
-            
-            // Get form data
-            const script_id = debugScriptId.value;
-            const script_content = debugContent.value;
-            
-            try {
-                const result = await apiRequest('/api/coding/debug', 'POST', { script_id, script_content });
-                
-                if (result.success) {
-                    // Update the UI with the debugged script
-                    debugCode.textContent = result.script.content;
-                    debugExplanation.innerHTML = markdownToHtml(result.explanation);
-                    debugDiff.innerHTML = result.diff_html;
-                    
-                    // Highlight the code
-                    hljs.highlightElement(debugCode);
-                    
-                    // Show the result
-                    debugResult.classList.remove('hidden');
-                    
-                    // Update the script ID if it's changed
-                    debugScriptId.value = result.script.id;
-                    
-                    // Refresh the script list
-                    loadScripts();
-                    
-                    // Scroll to the result
-                    debugResult.scrollIntoView({ behavior: 'smooth' });
-                    
-                    showToast('Script debugged successfully!', 'success');
-                } else {
-                    showToast(result.message || 'Failed to debug script', 'error');
-                }
-            } catch (error) {
-                showToast(`Error: ${error.message}`, 'error');
-            } finally {
-                // Reset loading state
-                debugForm.querySelector('button[type="submit"]').disabled = false;
-                debugForm.querySelector('button[type="submit"]').innerHTML = 'Debug Script';
-            }
-        });
-    }
-    
-    // Modify Script Form Submit
-    if (modifyForm) {
-        modifyForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            // Show loading state
-            modifyForm.querySelector('button[type="submit"]').disabled = true;
-            modifyForm.querySelector('button[type="submit"]').innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Modifying...';
-            
-            // Get form data
-            const script_id = modifyScriptId.value;
-            const script_content = modifyContent.value;
-            const modification_request = document.getElementById('modification-request').value;
-            
-            try {
-                const result = await apiRequest('/api/coding/modify', 'POST', { 
-                    script_id, 
-                    script_content, 
-                    modification_request 
-                });
-                
-                if (result.success) {
-                    // Update the UI with the modified script
-                    modifyCode.textContent = result.script.content;
-                    modifyExplanation.innerHTML = markdownToHtml(result.explanation);
-                    modifyDiff.innerHTML = result.diff_html;
-                    
-                    // Highlight the code
-                    hljs.highlightElement(modifyCode);
-                    
-                    // Show the result
-                    modifyResult.classList.remove('hidden');
-                    
-                    // Update the script ID if it's changed
-                    modifyScriptId.value = result.script.id;
-                    
-                    // Refresh the script list
-                    loadScripts();
-                    
-                    // Scroll to the result
-                    modifyResult.scrollIntoView({ behavior: 'smooth' });
-                    
-                    showToast('Script modified successfully!', 'success');
-                } else {
-                    showToast(result.message || 'Failed to modify script', 'error');
-                }
-            } catch (error) {
-                showToast(`Error: ${error.message}`, 'error');
-            } finally {
-                // Reset loading state
-                modifyForm.querySelector('button[type="submit"]').disabled = false;
-                modifyForm.querySelector('button[type="submit"]').innerHTML = 'Modify Script';
-            }
-        });
-    }
-    
-    // Compare Versions Form Submit
-    if (compareForm) {
-        compareForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            // Show loading state
-            compareForm.querySelector('button[type="submit"]').disabled = true;
-            compareForm.querySelector('button[type="submit"]').innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Comparing...';
-            
-            // Get form data
-            const script_id = compareSelectScript.value;
-            const version1_id = compareVersion1.value;
-            const version2_id = compareVersion2.value;
-            
-            try {
-                const result = await apiRequest('/api/coding/compare-versions', 'POST', { 
-                    script_id, 
-                    version1_id, 
-                    version2_id 
-                });
-                
-                if (result.success) {
-                    // Update the UI with the comparison results
-                    compareExplanation.innerHTML = markdownToHtml(result.explanation);
-                    compareDiff.innerHTML = result.diff_html;
-                    
-                    // Show the result
-                    compareResult.classList.remove('hidden');
-                    
-                    // Scroll to the result
-                    compareResult.scrollIntoView({ behavior: 'smooth' });
-                    
-                    showToast('Versions compared successfully!', 'success');
-                } else {
-                    showToast(result.message || 'Failed to compare versions', 'error');
-                }
-            } catch (error) {
-                showToast(`Error: ${error.message}`, 'error');
-            } finally {
-                // Reset loading state
-                compareForm.querySelector('button[type="submit"]').disabled = false;
-                compareForm.querySelector('button[type="submit"]').innerHTML = 'Compare Versions';
-            }
-        });
-    }
-    
-    // Copy buttons event listeners
-    if (copyGenerateButton) {
-        copyGenerateButton.addEventListener('click', function() {
-            const codeToCopy = generateCode.textContent;
-            copyToClipboard(codeToCopy);
-        });
-    }
-    
-    if (copyDebugButton) {
-        copyDebugButton.addEventListener('click', function() {
-            const codeToCopy = debugCode.textContent;
-            copyToClipboard(codeToCopy);
-        });
-    }
-    
-    if (copyModifyButton) {
-        copyModifyButton.addEventListener('click', function() {
-            const codeToCopy = modifyCode.textContent;
-            copyToClipboard(codeToCopy);
-        });
-    }
-    
-    // Script selection change handlers
-    if (debugSelectScript) {
-        debugSelectScript.addEventListener('change', function() {
-            const scriptId = this.value;
-            if (scriptId) {
-                const script = scripts.find(s => s.id == scriptId);
-                if (script) {
-                    debugContent.value = script.content;
-                    debugScriptId.value = script.id;
-                }
-            } else {
-                debugContent.value = '';
-                debugScriptId.value = '';
-            }
-        });
-    }
-    
-    if (modifySelectScript) {
-        modifySelectScript.addEventListener('change', function() {
-            const scriptId = this.value;
-            if (scriptId) {
-                const script = scripts.find(s => s.id == scriptId);
-                if (script) {
-                    modifyContent.value = script.content;
-                    modifyScriptId.value = script.id;
-                }
-            } else {
-                modifyContent.value = '';
-                modifyScriptId.value = '';
-            }
-        });
-    }
-    
-    if (compareSelectScript) {
-        compareSelectScript.addEventListener('change', async function() {
-            const scriptId = this.value;
-            if (scriptId) {
-                try {
-                    // Fetch versions for the selected script
-                    const result = await apiRequest(`/api/coding/versions/${scriptId}`, 'GET');
-                    
-                    if (result.success && result.versions.length > 0) {
-                        // Enable version selection
-                        compareVersion1.innerHTML = '<option value="">-- Select a version --</option>';
-                        compareVersion2.innerHTML = '<option value="">-- Select a version --</option>';
-                        
-                        // Add versions to the dropdowns
-                        result.versions.forEach(version => {
-                            const option1 = document.createElement('option');
-                            option1.value = version.id;
-                            option1.textContent = `Version ${version.version} (${new Date(version.created_at).toLocaleString()})`;
-                            compareVersion1.appendChild(option1);
-                            
-                            const option2 = document.createElement('option');
-                            option2.value = version.id;
-                            option2.textContent = `Version ${version.version} (${new Date(version.created_at).toLocaleString()})`;
-                            compareVersion2.appendChild(option2);
-                        });
-                        
-                        // Enable version selection
-                        compareVersion1.disabled = false;
-                        compareVersion2.disabled = false;
-                        
-                        // Set default selections to oldest and newest
-                        if (result.versions.length >= 2) {
-                            compareVersion1.value = result.versions[0].id;
-                            compareVersion2.value = result.versions[result.versions.length - 1].id;
-                        }
-                        
-                        // Enable compare button
-                        compareForm.querySelector('button[type="submit"]').disabled = false;
-                    } else {
-                        showToast('No versions available for comparison', 'error');
-                        compareVersion1.disabled = true;
-                        compareVersion2.disabled = true;
-                        compareForm.querySelector('button[type="submit"]').disabled = true;
-                    }
-                } catch (error) {
-                    showToast(`Error: ${error.message}`, 'error');
-                }
-            } else {
-                compareVersion1.innerHTML = '<option value="">-- Select a version --</option>';
-                compareVersion2.innerHTML = '<option value="">-- Select a version --</option>';
-                compareVersion1.disabled = true;
-                compareVersion2.disabled = true;
-                compareForm.querySelector('button[type="submit"]').disabled = true;
-            }
-        });
-    }
-    
-    // Function to load scripts
-    async function loadScripts() {
+// Function to get CSRF token
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+}
+
+// Handle Generate Script form submission with streaming
+function handleGenerateScriptFormSubmit(form, promptInput, languageSelect, resultContainer) {
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        // Get input values
+        const prompt = promptInput.value.trim();
+        const language = languageSelect.value || 'python';
+        
+        if (!prompt) {
+            showToast('Please enter a prompt for the script', 'error');
+            return;
+        }
+        
+        // Show loading state
+        const submitButton = form.querySelector('button[type="submit"]');
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Generating...';
+        
+        // Prepare the result container for streaming
+        resultContainer.classList.remove('hidden');
+        const titleElement = resultContainer.querySelector('.script-title');
+        const codeElement = resultContainer.querySelector('.script-code');
+        
+        titleElement.textContent = prompt.split('\n')[0].trim() || 'Generated Script';
+        codeElement.textContent = '';
+        codeElement.innerHTML = '<span class="typing-cursor"></span>';
+        
         try {
-            const result = await apiRequest('/api/coding/scripts', 'GET');
+            // Send request with streaming enabled
+            const response = await fetch('/api/coding/generate?stream=true', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({ prompt, language })
+            });
             
-            if (result.success) {
-                scripts = result.scripts;
+            if (response.ok) {
+                // Set up the reader for the stream
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let accumulatedContent = '';
                 
-                // Update script selectors
-                updateScriptSelectors();
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6)); // Remove 'data: ' prefix
+                                
+                                if (data.error) {
+                                    showToast(`Error: ${data.error}`, 'error');
+                                    break;
+                                }
+                                
+                                if (data.chunk) {
+                                    // Update the content with the new chunk
+                                    accumulatedContent += data.chunk;
+                                    codeElement.textContent = accumulatedContent;
+                                    codeElement.innerHTML = codeElement.textContent + '<span class="typing-cursor"></span>';
+                                    
+                                    // Highlight the code
+                                    hljs.highlightElement(codeElement);
+                                    
+                                    // Add the cursor back
+                                    codeElement.innerHTML = codeElement.innerHTML + '<span class="typing-cursor"></span>';
+                                }
+                                
+                                if (data.done) {
+                                    // Remove the typing cursor when done
+                                    codeElement.textContent = accumulatedContent;
+                                    hljs.highlightElement(codeElement);
+                                    
+                                    // Enable copy button
+                                    const copyButton = resultContainer.querySelector('.btn-copy');
+                                    if (copyButton) {
+                                        copyButton.disabled = false;
+                                    }
+                                    
+                                    showToast('Script generated successfully', 'success');
+                                    break;
+                                }
+                            } catch (e) {
+                                console.error('Error parsing streaming data:', e);
+                            }
+                        }
+                    }
+                }
             } else {
-                console.error('Failed to load scripts:', result.message);
+                const result = await response.json();
+                showToast(result.message || 'Failed to generate script', 'error');
             }
         } catch (error) {
-            console.error('Error loading scripts:', error);
+            showToast(`Error: ${error.message}`, 'error');
+        } finally {
+            // Reset submit button
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Generate Script';
+        }
+    });
+}
+
+// Handle Debug Script form submission with streaming
+function handleDebugScriptFormSubmit(form, scriptContent, resultContainer) {
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        // Get input values
+        const script_content = scriptContent.value.trim();
+        const script_id = scriptContent.dataset.scriptId || '';
+        
+        if (!script_content) {
+            showToast('Please enter script content to debug', 'error');
+            return;
+        }
+        
+        // Show loading state
+        const submitButton = form.querySelector('button[type="submit"]');
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Debugging...';
+        
+        // Prepare the result container for streaming
+        resultContainer.classList.remove('hidden');
+        const explanationElement = resultContainer.querySelector('.debug-explanation');
+        const codeElement = resultContainer.querySelector('.debug-code');
+        const diffElement = resultContainer.querySelector('.debug-diff');
+        
+        explanationElement.textContent = 'Analyzing script...';
+        codeElement.textContent = '';
+        codeElement.innerHTML = '<span class="typing-cursor"></span>';
+        diffElement.innerHTML = '<div class="p-4 bg-gray-100 rounded">Generating diff...</div>';
+        
+        try {
+            // Send request with streaming enabled
+            const response = await fetch('/api/coding/debug?stream=true', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({ script_id, script_content })
+            });
+            
+            if (response.ok) {
+                // Set up the reader for the stream
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let accumulatedContent = '';
+                
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6)); // Remove 'data: ' prefix
+                                
+                                if (data.error) {
+                                    showToast(`Error: ${data.error}`, 'error');
+                                    break;
+                                }
+                                
+                                if (data.chunk) {
+                                    // Update the content with the new chunk
+                                    accumulatedContent += data.chunk;
+                                    
+                                    // Try to extract explanation and code as we go
+                                    const { explanation, code } = extractExplanationAndCode(accumulatedContent);
+                                    
+                                    if (explanation) {
+                                        explanationElement.textContent = explanation;
+                                    }
+                                    
+                                    if (code) {
+                                        codeElement.textContent = code;
+                                        codeElement.innerHTML = codeElement.textContent + '<span class="typing-cursor"></span>';
+                                        hljs.highlightElement(codeElement);
+                                        codeElement.innerHTML = codeElement.innerHTML + '<span class="typing-cursor"></span>';
+                                    }
+                                }
+                                
+                                if (data.done) {
+                                    // Final extraction and formatting
+                                    const { explanation, code } = extractExplanationAndCode(accumulatedContent);
+                                    
+                                    explanationElement.textContent = explanation || 'Debug complete.';
+                                    
+                                    if (code) {
+                                        codeElement.textContent = code;
+                                        hljs.highlightElement(codeElement);
+                                        
+                                        // Generate a simple diff for display
+                                        const diffHtml = generateSimpleDiff(script_content, code);
+                                        diffElement.innerHTML = diffHtml;
+                                    }
+                                    
+                                    // Enable copy button
+                                    const copyButton = resultContainer.querySelector('.btn-copy');
+                                    if (copyButton) {
+                                        copyButton.disabled = false;
+                                    }
+                                    
+                                    showToast('Script debugged successfully', 'success');
+                                    break;
+                                }
+                            } catch (e) {
+                                console.error('Error parsing streaming data:', e);
+                            }
+                        }
+                    }
+                }
+            } else {
+                const result = await response.json();
+                showToast(result.message || 'Failed to debug script', 'error');
+            }
+        } catch (error) {
+            showToast(`Error: ${error.message}`, 'error');
+        } finally {
+            // Reset submit button
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Debug Script';
+        }
+    });
+}
+
+// Handle Modify Script form submission with streaming
+function handleModifyScriptFormSubmit(form, scriptContent, modificationRequest, resultContainer) {
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        // Get input values
+        const script_content = scriptContent.value.trim();
+        const script_id = scriptContent.dataset.scriptId || '';
+        const modification_request = modificationRequest.value.trim();
+        
+        if (!script_content) {
+            showToast('Please enter script content to modify', 'error');
+            return;
+        }
+        
+        if (!modification_request) {
+            showToast('Please enter modification request', 'error');
+            return;
+        }
+        
+        // Show loading state
+        const submitButton = form.querySelector('button[type="submit"]');
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Modifying...';
+        
+        // Prepare the result container for streaming
+        resultContainer.classList.remove('hidden');
+        const explanationElement = resultContainer.querySelector('.modify-explanation');
+        const codeElement = resultContainer.querySelector('.modify-code');
+        const diffElement = resultContainer.querySelector('.modify-diff');
+        
+        explanationElement.textContent = 'Processing modification request...';
+        codeElement.textContent = '';
+        codeElement.innerHTML = '<span class="typing-cursor"></span>';
+        diffElement.innerHTML = '<div class="p-4 bg-gray-100 rounded">Generating diff...</div>';
+        
+        try {
+            // Send request with streaming enabled
+            const response = await fetch('/api/coding/modify?stream=true', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({ script_id, script_content, modification_request })
+            });
+            
+            if (response.ok) {
+                // Set up the reader for the stream
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let accumulatedContent = '';
+                
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6)); // Remove 'data: ' prefix
+                                
+                                if (data.error) {
+                                    showToast(`Error: ${data.error}`, 'error');
+                                    break;
+                                }
+                                
+                                if (data.chunk) {
+                                    // Update the content with the new chunk
+                                    accumulatedContent += data.chunk;
+                                    
+                                    // Try to extract explanation and code as we go
+                                    const { explanation, code } = extractExplanationAndCode(accumulatedContent);
+                                    
+                                    if (explanation) {
+                                        explanationElement.textContent = explanation;
+                                    }
+                                    
+                                    if (code) {
+                                        codeElement.textContent = code;
+                                        codeElement.innerHTML = codeElement.textContent + '<span class="typing-cursor"></span>';
+                                        hljs.highlightElement(codeElement);
+                                        codeElement.innerHTML = codeElement.innerHTML + '<span class="typing-cursor"></span>';
+                                    }
+                                }
+                                
+                                if (data.done) {
+                                    // Final extraction and formatting
+                                    const { explanation, code } = extractExplanationAndCode(accumulatedContent);
+                                    
+                                    explanationElement.textContent = explanation || 'Modification complete.';
+                                    
+                                    if (code) {
+                                        codeElement.textContent = code;
+                                        hljs.highlightElement(codeElement);
+                                        
+                                        // Generate a simple diff for display
+                                        const diffHtml = generateSimpleDiff(script_content, code);
+                                        diffElement.innerHTML = diffHtml;
+                                    }
+                                    
+                                    // Enable copy button
+                                    const copyButton = resultContainer.querySelector('.btn-copy');
+                                    if (copyButton) {
+                                        copyButton.disabled = false;
+                                    }
+                                    
+                                    showToast('Script modified successfully', 'success');
+                                    break;
+                                }
+                            } catch (e) {
+                                console.error('Error parsing streaming data:', e);
+                            }
+                        }
+                    }
+                }
+            } else {
+                const result = await response.json();
+                showToast(result.message || 'Failed to modify script', 'error');
+            }
+        } catch (error) {
+            showToast(`Error: ${error.message}`, 'error');
+        } finally {
+            // Reset submit button
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Modify Script';
+        }
+    });
+}
+
+// Helper function to extract explanation and code from streamed content
+function extractExplanationAndCode(content) {
+    let explanation = '';
+    let code = '';
+    
+    // Check for markdown code blocks
+    if (content.includes('```')) {
+        const parts = content.split('```');
+        if (parts.length >= 3) {
+            explanation = parts[0].trim();
+            
+            // Remove the language identifier if present
+            let codeBlock = parts[1];
+            if (codeBlock.indexOf('\n') > 0) {
+                codeBlock = codeBlock.substring(codeBlock.indexOf('\n') + 1);
+            }
+            code = codeBlock.trim();
+        }
+    } else {
+        // Try to split on common separators
+        const separators = [
+            '### CODE ###',
+            'Here is the code:',
+            'Here\'s the code:',
+            'Modified code:',
+            'Debugged code:'
+        ];
+        
+        for (const separator of separators) {
+            if (content.includes(separator)) {
+                const parts = content.split(separator);
+                explanation = parts[0].trim();
+                code = parts[1].trim();
+                break;
+            }
+        }
+        
+        // If no clear separator, make a best guess
+        if (!code && content.includes('\n')) {
+            const lines = content.split('\n');
+            let codeStartLine = 0;
+            
+            // Look for code-like lines
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].trim().startsWith('def ') || 
+                    lines[i].trim().startsWith('class ') || 
+                    lines[i].trim().startsWith('import ') || 
+                    lines[i].trim().startsWith('from ')) {
+                    codeStartLine = i;
+                    break;
+                }
+            }
+            
+            if (codeStartLine > 0) {
+                explanation = lines.slice(0, codeStartLine).join('\n').trim();
+                code = lines.slice(codeStartLine).join('\n').trim();
+            }
         }
     }
     
-    // Function to update script selectors
-    function updateScriptSelectors() {
-        // Update Debug Script selector
-        if (debugSelectScript) {
-            const currentValue = debugSelectScript.value;
-            debugSelectScript.innerHTML = '<option value="">-- Select a script --</option>';
-            
-            scripts.forEach(script => {
-                const option = document.createElement('option');
-                option.value = script.id;
-                option.textContent = script.title;
-                debugSelectScript.appendChild(option);
-            });
-            
-            // Restore selected value if it still exists
-            if (currentValue && scripts.some(s => s.id == currentValue)) {
-                debugSelectScript.value = currentValue;
-            }
-        }
-        
-        // Update Modify Script selector
-        if (modifySelectScript) {
-            const currentValue = modifySelectScript.value;
-            modifySelectScript.innerHTML = '<option value="">-- Select a script --</option>';
-            
-            scripts.forEach(script => {
-                const option = document.createElement('option');
-                option.value = script.id;
-                option.textContent = script.title;
-                modifySelectScript.appendChild(option);
-            });
-            
-            // Restore selected value if it still exists
-            if (currentValue && scripts.some(s => s.id == currentValue)) {
-                modifySelectScript.value = currentValue;
-            }
-        }
-        
-        // Update Compare Scripts selector
-        if (compareSelectScript) {
-            const currentValue = compareSelectScript.value;
-            compareSelectScript.innerHTML = '<option value="">-- Select a script --</option>';
-            
-            scripts.forEach(script => {
-                const option = document.createElement('option');
-                option.value = script.id;
-                option.textContent = script.title;
-                compareSelectScript.appendChild(option);
-            });
-            
-            // Restore selected value if it still exists
-            if (currentValue && scripts.some(s => s.id == currentValue)) {
-                compareSelectScript.value = currentValue;
-            }
+    return { explanation, code };
+}
+
+// Generate a simple diff for display
+function generateSimpleDiff(oldCode, newCode) {
+    const oldLines = oldCode.split('\n');
+    const newLines = newCode.split('\n');
+    
+    let html = '<div class="diff-container">';
+    
+    // Simple line-by-line comparison
+    const oldSet = new Set(oldLines);
+    const newSet = new Set(newLines);
+    
+    // Find removed and added lines
+    const removed = oldLines.filter(line => !newSet.has(line));
+    const added = newLines.filter(line => !oldSet.has(line));
+    
+    // Create HTML diff
+    for (const line of oldLines) {
+        if (removed.includes(line)) {
+            html += `<div class="diff-line-removed">${escapeHtml(line)}</div>`;
         }
     }
+    
+    for (const line of newLines) {
+        if (added.includes(line)) {
+            html += `<div class="diff-line-added">${escapeHtml(line)}</div>`;
+        }
+    }
+    
+    html += '</div>';
+    return html;
+}
+
+// Escape HTML special characters for safe display
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// CSS for typing cursor
+document.head.insertAdjacentHTML('beforeend', `
+<style>
+.typing-cursor {
+    display: inline-block;
+    width: 5px;
+    height: 15px;
+    background-color: #000;
+    animation: blink 1s infinite;
+    margin-left: 2px;
+    vertical-align: middle;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+.diff-container {
+    font-family: monospace;
+    white-space: pre;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+
+.diff-line-added {
+    background-color: #e6ffe6;
+    color: #006600;
+}
+
+.diff-line-removed {
+    background-color: #ffe6e6;
+    color: #cc0000;
+    text-decoration: line-through;
+}
+</style>
+`);
+
+// Initialize form handlers when the document is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Generate Script Form
+    const generateScriptForm = document.getElementById('generate-script-form');
+    if (generateScriptForm) {
+        const promptInput = document.getElementById('script-prompt');
+        const languageSelect = document.getElementById('script-language');
+        const resultContainer = document.getElementById('generate-script-result');
+        handleGenerateScriptFormSubmit(generateScriptForm, promptInput, languageSelect, resultContainer);
+    }
+    
+    // Debug Script Form
+    const debugScriptForm = document.getElementById('debug-script-form');
+    if (debugScriptForm) {
+        const scriptContent = document.getElementById('debug-script-content');
+        const resultContainer = document.getElementById('debug-script-result');
+        handleDebugScriptFormSubmit(debugScriptForm, scriptContent, resultContainer);
+    }
+    
+    // Modify Script Form
+    const modifyScriptForm = document.getElementById('modify-script-form');
+    if (modifyScriptForm) {
+        const scriptContent = document.getElementById('modify-script-content');
+        const modificationRequest = document.getElementById('modification-request');
+        const resultContainer = document.getElementById('modify-script-result');
+        handleModifyScriptFormSubmit(modifyScriptForm, scriptContent, modificationRequest, resultContainer);
+    }
+    
+    // Initialize copy buttons
+    initializeCopyButtons();
 });
+
+// Initialize copy buttons
+function initializeCopyButtons() {
+    document.querySelectorAll('.btn-copy').forEach(button => {
+        button.addEventListener('click', function() {
+            const codeElement = this.closest('.result-container').querySelector('pre code');
+            if (codeElement) {
+                const code = codeElement.textContent;
+                navigator.clipboard.writeText(code).then(() => {
+                    showToast('Code copied to clipboard!', 'success');
+                });
+            }
+        });
+    });
+}
