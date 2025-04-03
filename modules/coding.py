@@ -26,7 +26,7 @@ class CodingModule:
             language (str): Programming language for the script
         
         Returns:
-            dict: Generated script and metadata
+            dict: Generated script and metadata or a generator if streaming is enabled
         """
         system_message = f"""You are an expert {language} developer specializing in cybersecurity and
         automotive systems. Generate a well-commented, production-ready script based on the user's requirements.
@@ -40,35 +40,17 @@ class CodingModule:
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.2,
-                max_tokens=4000
+                max_tokens=4000,
+                stream=True
             )
             
-            script_content = response.choices[0].message.content.strip()
-            
-            # Extract code from markdown code blocks if present
-            if script_content.startswith("```") and script_content.endswith("```"):
-                script_content = self._extract_code_from_markdown(script_content)
-            
-            # Create database entry
+            # Return the streaming response
             title = prompt.split('\n')[0].strip() if '\n' in prompt else prompt[:50] + "..."
-            script = Script(title=title, content=script_content, language=language)
-            db.session.add(script)
-            db.session.commit()
-            
-            # Create initial version
-            script_version = ScriptVersion(
-                script_id=script.id,
-                content=script_content,
-                version=1,
-                changes="Initial script generation"
-            )
-            db.session.add(script_version)
-            db.session.commit()
-            
             return {
                 "success": True,
-                "script": script.to_dict(),
-                "message": "Script generated successfully"
+                "stream": response,
+                "title": title,
+                "language": language
             }
             
         except Exception as e:
@@ -87,7 +69,7 @@ class CodingModule:
             script_content (str): Current content of the script
         
         Returns:
-            dict: Debugged script and explanation
+            dict: Debugged script and explanation or a generator if streaming is enabled
         """
         system_message = """You are an expert code debugger specializing in identifying and fixing errors in code.
         Analyze the provided code, identify any bugs, errors, or potential issues, and provide a fixed version
@@ -98,54 +80,18 @@ class CodingModule:
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_message},
-                    {"role": "user", "content": f"Debug the following code:\n\n{script_content}"}
+                    {"role": "user", "content": f"Debug the following code and identify/fix any issues:\n\n{script_content}"}
                 ],
                 temperature=0.2,
-                max_tokens=4000
+                max_tokens=4000,
+                stream=True
             )
             
-            result_content = response.choices[0].message.content.strip()
-            
-            # Extract code and explanation
-            debugged_code, explanation = self._extract_code_and_explanation(result_content)
-            
-            # Update the script in the database
-            script = Script.query.get(script_id)
-            if not script:
-                return {
-                    "success": False,
-                    "error": "Script not found",
-                    "message": "Failed to debug script: Script not found"
-                }
-            
-            # Create new version
-            current_version = ScriptVersion.query.filter_by(script_id=script_id).order_by(ScriptVersion.version.desc()).first()
-            new_version = current_version.version + 1 if current_version else 1
-            
-            script_version = ScriptVersion(
-                script_id=script.id,
-                content=debugged_code,
-                version=new_version,
-                changes=explanation
-            )
-            
-            # Update the script with the debugged code
-            script.content = debugged_code
-            
-            db.session.add(script_version)
-            db.session.commit()
-            
-            # Generate diff
-            diffs = self.dmp.diff_main(script_content, debugged_code)
-            self.dmp.diff_cleanupSemantic(diffs)
-            diff_html = self.dmp.diff_prettyHtml(diffs)
-            
+            # Return the streaming response
             return {
                 "success": True,
-                "script": script.to_dict(),
-                "explanation": explanation,
-                "diff_html": diff_html,
-                "message": "Script debugged successfully"
+                "stream": response,
+                "script_id": script_id
             }
             
         except Exception as e:
@@ -165,65 +111,37 @@ class CodingModule:
             modification_request (str): Description of the requested modifications
         
         Returns:
-            dict: Modified script and explanation
+            dict: Modified script and explanation or a generator if streaming is enabled
         """
-        system_message = """You are an expert code modifier. Your task is to modify the provided code
-        according to the user's request. Provide the complete modified code along with a concise
-        explanation of the changes you made."""
+        system_message = """You are an expert code modifier specializing in adapting existing code to new requirements.
+        Analyze the provided code and the modification request, and provide a modified version of the code that
+        addresses the requested changes. Include explanations for significant changes."""
         
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_message},
-                    {"role": "user", "content": f"Modify the following code according to this request: '{modification_request}'\n\n{script_content}"}
+                    {"role": "user", "content": f"""Modify the following code according to this request:
+                    
+                    MODIFICATION REQUEST:
+                    {modification_request}
+                    
+                    CURRENT CODE:
+                    {script_content}
+                    
+                    Please provide the modified code and explain the changes you made."""}
                 ],
                 temperature=0.2,
-                max_tokens=4000
+                max_tokens=4000,
+                stream=True
             )
             
-            result_content = response.choices[0].message.content.strip()
-            
-            # Extract code and explanation
-            modified_code, explanation = self._extract_code_and_explanation(result_content)
-            
-            # Update the script in the database
-            script = Script.query.get(script_id)
-            if not script:
-                return {
-                    "success": False,
-                    "error": "Script not found",
-                    "message": "Failed to modify script: Script not found"
-                }
-            
-            # Create new version
-            current_version = ScriptVersion.query.filter_by(script_id=script_id).order_by(ScriptVersion.version.desc()).first()
-            new_version = current_version.version + 1 if current_version else 1
-            
-            script_version = ScriptVersion(
-                script_id=script.id,
-                content=modified_code,
-                version=new_version,
-                changes=explanation
-            )
-            
-            # Update the script with the modified code
-            script.content = modified_code
-            
-            db.session.add(script_version)
-            db.session.commit()
-            
-            # Generate diff
-            diffs = self.dmp.diff_main(script_content, modified_code)
-            self.dmp.diff_cleanupSemantic(diffs)
-            diff_html = self.dmp.diff_prettyHtml(diffs)
-            
+            # Return the streaming response
             return {
                 "success": True,
-                "script": script.to_dict(),
-                "explanation": explanation,
-                "diff_html": diff_html,
-                "message": "Script modified successfully"
+                "stream": response,
+                "script_id": script_id
             }
             
         except Exception as e:
@@ -242,43 +160,52 @@ class CodingModule:
             new_content (str): New content of the script
         
         Returns:
-            dict: Explanation of changes and diff visualization
+            dict: Explanation of changes and diff visualization or a generator if streaming is enabled
         """
-        system_message = """You are an expert code analyzer. Your task is to explain the differences
-        between two versions of code. Provide a detailed yet concise explanation of what has changed
-        and why these changes might have been made."""
+        system_message = """You are an expert code reviewer specializing in analyzing code changes.
+        Examine the changes between the old and new versions of the code, and provide a clear,
+        concise explanation of the changes, focusing on functionality, performance, and security impacts."""
         
         try:
-            # Generate diffs
+            # Generate visual diff for display
+            self.dmp.Diff_Timeout = 5.0  # Increase timeout for larger files
             diffs = self.dmp.diff_main(old_content, new_content)
             self.dmp.diff_cleanupSemantic(diffs)
             diff_html = self.dmp.diff_prettyHtml(diffs)
             
-            # Create diff text for AI analysis
-            diff_text = ""
-            for op, text in diffs:
-                if op == -1:
-                    diff_text += f"- {text}\n"
-                elif op == 1:
-                    diff_text += f"+ {text}\n"
+            # Remove css styling from the output for better display in the app
+            diff_html = diff_html.replace('style="background:#e6ffe6;"', 'class="diff-add"')
+            diff_html = diff_html.replace('style="background:#ffe6e6;"', 'class="diff-del"')
             
+            # Call DeepSeek API for explanation
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_message},
-                    {"role": "user", "content": f"Explain the following changes in the code:\n\n{diff_text}"}
+                    {"role": "user", "content": f"""Explain the changes between these two versions of code:
+                    
+                    ORIGINAL CODE:
+                    ```
+                    {old_content}
+                    ```
+                    
+                    NEW CODE:
+                    ```
+                    {new_content}
+                    ```
+                    
+                    Please provide a clear, concise explanation of the changes."""}
                 ],
-                temperature=0.2,
-                max_tokens=2000
+                temperature=0.3,
+                max_tokens=2000,
+                stream=True
             )
             
-            explanation = response.choices[0].message.content.strip()
-            
+            # Return the streaming response and the diff HTML
             return {
                 "success": True,
-                "explanation": explanation,
-                "diff_html": diff_html,
-                "message": "Changes explained successfully"
+                "stream": response,
+                "diff_html": diff_html
             }
             
         except Exception as e:
