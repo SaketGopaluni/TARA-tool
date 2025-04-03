@@ -102,6 +102,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                         break;
                                     }
                                     
+                                    if (data.initializing) {
+                                        console.log('Stream initialized');
+                                        continue;
+                                    }
+                                    
                                     if (data.chunk) {
                                         // Update the content with the new chunk
                                         accumulatedContent += data.chunk;
@@ -271,6 +276,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                     if (data.error) {
                                         showToast(`Error: ${data.error}`, 'error');
                                         break;
+                                    }
+                                    
+                                    if (data.initializing) {
+                                        console.log('Stream initialized');
+                                        continue;
                                     }
                                     
                                     if (data.chunk) {
