@@ -37,10 +37,14 @@ csrf = CSRFProtect(app)
 # Setup proxy fix for Vercel
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-# Initialize OpenAI client for DeepSeek
+# Initialize OpenAI client for DeepSeek with a lower timeout
 try:
     from openai import OpenAI
-    openai_client = OpenAI(api_key=app.config['DEEPSEEK_API_KEY'], base_url="https://api.deepseek.com")
+    openai_client = OpenAI(
+        api_key=app.config['DEEPSEEK_API_KEY'], 
+        base_url="https://api.deepseek.com",
+        timeout=5.0  # Set a 5 second timeout to ensure we don't hit Vercel's 10s limit
+    )
 except ImportError:
     app.logger.error("OpenAI package not installed. Please run 'pip install openai'")
     openai_client = None
@@ -113,6 +117,10 @@ def timed_response(f):
 def stream_deepseek_response(response_stream):
     """Stream the DeepSeek response to the client."""
     try:
+        # Send an immediate empty response to prevent Vercel function timeouts
+        # This reduces time-to-first-byte and keeps the connection alive
+        yield f"data: {json.dumps({'chunk': '', 'full': '', 'initializing': True})}\n\n"
+        
         full_content = ""
         
         # Stream each chunk
