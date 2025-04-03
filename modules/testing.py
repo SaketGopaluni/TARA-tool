@@ -8,10 +8,25 @@ import contextlib
 import traceback
 from openai import OpenAI
 from database import db, Script, TestCase, TestResult
+from flask import current_app
 
 class TestingModule:
-    def __init__(self, api_key, model):
+    def __init__(self, api_key=None, model=None, app=None):
         """Initialize the testing module with API credentials."""
+        # Store Flask app reference if provided
+        self.app = app
+        
+        # Get API key and model from app config if available
+        if app:
+            api_key = api_key or app.config.get('DEEPSEEK_API_KEY')
+            model = model or app.config.get('DEEPSEEK_MODEL', 'deepseek-chat')
+        else:
+            api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
+            model = model or os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+            
+        if not api_key:
+            raise ValueError("DEEPSEEK_API_KEY not set in environment or app config")
+            
         # Initialize the OpenAI client with DeepSeek's base URL and API key
         self.client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         self.model = model
