@@ -59,31 +59,80 @@ document.addEventListener('DOMContentLoaded', function() {
             const test_requirements = testRequirements.value;
             
             try {
-                const result = await apiRequest('/api/testing/generate', 'POST', { 
-                    script_id, 
-                    script_content, 
-                    test_requirements 
+                // Initialize the code output area with a placeholder for streaming
+                testCode.textContent = '';
+                testCode.innerHTML = '<span class="typing-cursor"></span>';
+                generateTestResult.classList.remove('hidden');
+                testTitle.textContent = test_requirements.split('\n')[0].trim() || 'Test Case';
+                
+                // Send request to API with streaming enabled
+                const response = await fetch('/api/testing/generate?stream=true', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify({ 
+                        script_id, 
+                        script_content, 
+                        test_requirements 
+                    })
                 });
                 
-                if (result.success) {
-                    // Update the UI with the generated test case
-                    testTitle.textContent = result.test_case.title;
-                    testCode.textContent = result.test_case.content;
+                if (response.ok) {
+                    // Set up the reader for the stream
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let accumulatedContent = '';
                     
-                    // Highlight the code
-                    hljs.highlightElement(testCode);
-                    
-                    // Show the result
-                    generateTestResult.classList.remove('hidden');
-                    
-                    // Refresh the test case list
-                    loadTestCases(script_id);
-                    
-                    // Scroll to the result
-                    generateTestResult.scrollIntoView({ behavior: 'smooth' });
-                    
-                    showToast('Test case generated successfully!', 'success');
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) break;
+                        
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n\n');
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.slice(6)); // Remove 'data: ' prefix
+                                    
+                                    if (data.error) {
+                                        showToast(`Error: ${data.error}`, 'error');
+                                        break;
+                                    }
+                                    
+                                    if (data.chunk) {
+                                        // Update the content with the new chunk
+                                        accumulatedContent += data.chunk;
+                                        testCode.textContent = accumulatedContent;
+                                        testCode.innerHTML = testCode.textContent + '<span class="typing-cursor"></span>';
+                                        
+                                        // Highlight the code
+                                        hljs.highlightElement(testCode);
+                                        
+                                        // Add the cursor back
+                                        testCode.innerHTML = testCode.innerHTML + '<span class="typing-cursor"></span>';
+                                    }
+                                    
+                                    if (data.done) {
+                                        // Remove the typing cursor when done
+                                        testCode.textContent = accumulatedContent;
+                                        hljs.highlightElement(testCode);
+                                        
+                                        // Refresh the test case list
+                                        loadTestCases(script_id);
+                                        showToast("Test case generated successfully", 'success');
+                                        break;
+                                    }
+                                } catch (e) {
+                                    console.error('Error parsing streaming data:', e);
+                                }
+                            }
+                        }
+                    }
                 } else {
+                    const result = await response.json();
                     showToast(result.message || 'Failed to generate test case', 'error');
                 }
             } catch (error) {
@@ -180,38 +229,81 @@ document.addEventListener('DOMContentLoaded', function() {
             const test_result_output = document.getElementById('improve-test-result').value;
             
             try {
-                const result = await apiRequest('/api/testing/improve', 'POST', { 
-                    test_case_id, 
-                    test_content, 
-                    script_content, 
-                    test_result_output 
+                // Initialize the code output area with a placeholder for streaming
+                improvedTestCode.textContent = '';
+                improvedTestCode.innerHTML = '<span class="typing-cursor"></span>';
+                document.getElementById('improved-test-result').classList.remove('hidden');
+                improvedTestTitle.textContent = 'Improved Test Case';
+                
+                // Send request to API with streaming enabled
+                const response = await fetch('/api/testing/improve?stream=true', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify({ 
+                        test_case_id, 
+                        test_content, 
+                        script_content,
+                        test_result_output
+                    })
                 });
                 
-                if (result.success) {
-                    // Update the UI with the improved test case
-                    improvedTestTitle.textContent = result.test_case.title;
-                    improvedTestCode.textContent = result.test_case.content;
+                if (response.ok) {
+                    // Set up the reader for the stream
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let accumulatedContent = '';
                     
-                    // Highlight the code
-                    hljs.highlightElement(improvedTestCode);
-                    
-                    // Show the result
-                    improveTestResult.classList.remove('hidden');
-                    
-                    // Update the test content in the form
-                    improveTestContent.value = result.test_case.content;
-                    
-                    // Refresh the test case list
-                    const script_id = improveSelectScript.value;
-                    if (script_id) {
-                        loadTestCases(script_id);
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) break;
+                        
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n\n');
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.slice(6)); // Remove 'data: ' prefix
+                                    
+                                    if (data.error) {
+                                        showToast(`Error: ${data.error}`, 'error');
+                                        break;
+                                    }
+                                    
+                                    if (data.chunk) {
+                                        // Update the content with the new chunk
+                                        accumulatedContent += data.chunk;
+                                        improvedTestCode.textContent = accumulatedContent;
+                                        improvedTestCode.innerHTML = improvedTestCode.textContent + '<span class="typing-cursor"></span>';
+                                        
+                                        // Highlight the code
+                                        hljs.highlightElement(improvedTestCode);
+                                        
+                                        // Add the cursor back
+                                        improvedTestCode.innerHTML = improvedTestCode.innerHTML + '<span class="typing-cursor"></span>';
+                                    }
+                                    
+                                    if (data.done) {
+                                        // Remove the typing cursor when done
+                                        improvedTestCode.textContent = accumulatedContent;
+                                        hljs.highlightElement(improvedTestCode);
+                                        
+                                        // Refresh the test case list
+                                        loadTestCases(improveSelectScript.value);
+                                        showToast("Test case improved successfully", 'success');
+                                        break;
+                                    }
+                                } catch (e) {
+                                    console.error('Error parsing streaming data:', e);
+                                }
+                            }
+                        }
                     }
-                    
-                    // Scroll to the result
-                    improveTestResult.scrollIntoView({ behavior: 'smooth' });
-                    
-                    showToast('Test case improved successfully!', 'success');
                 } else {
+                    const result = await response.json();
                     showToast(result.message || 'Failed to improve test case', 'error');
                 }
             } catch (error) {
@@ -481,4 +573,29 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error loading test cases:', error);
         }
     }
+    
+    // Function to get CSRF token
+    function getCsrfToken() {
+        return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    }
+    
+    // CSS for typing cursor
+    document.head.insertAdjacentHTML('beforeend', `
+<style>
+.typing-cursor {
+    display: inline-block;
+    width: 5px;
+    height: 15px;
+    background-color: #000;
+    animation: blink 1s infinite;
+    margin-left: 2px;
+    vertical-align: middle;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+</style>
+`);
 });
