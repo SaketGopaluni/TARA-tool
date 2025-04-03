@@ -10,10 +10,16 @@ from openai import OpenAI
 from database import db, Script, TestCase, TestResult
 
 class TestingModule:
-    def __init__(self, api_key, model):
-        """Initialize the testing module with API credentials."""
-        self.client = OpenAI(api_key=api_key, base_url="https://api.openai.com/v1")
-        self.model = model
+    def __init__(self):
+        """Initialize the testing module with DeepSeek API credentials from environment variable."""
+        # Fetch the API key from the environment variable DEEPSEEK_API_KEY
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        if not api_key:
+            raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
+        
+        # Initialize the OpenAI client with DeepSeek's base URL and API key
+        self.client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        self.model = "deepseek-chat"
     
     def generate_test_case(self, script_id, script_content, test_requirements):
         """
@@ -197,67 +203,3 @@ class TestingModule:
                     SCRIPT:
                     ```python
                     {script_content}
-                    ```
-                    
-                    TEST CASE:
-                    ```python
-                    {test_content}
-                    ```
-                    
-                    EXECUTION RESULTS:
-                    ```
-                    {test_result_output}
-                    ```
-                    
-                    Please provide an improved version of the test case that addresses any issues."""}
-                ],
-                temperature=0.2,
-                max_tokens=4000
-            )
-            
-            improved_test_content = response.choices[0].message.content.strip()
-            
-            # Extract code from markdown code blocks if present
-            if improved_test_content.startswith("```") and improved_test_content.endswith("```"):
-                improved_test_content = self._extract_code_from_markdown(improved_test_content)
-            
-            # Update the test case in the database
-            test_case = TestCase.query.get(test_case_id)
-            
-            if not test_case:
-                return {
-                    "success": False,
-                    "error": "Test case not found",
-                    "message": "Failed to improve test case: Test case not found"
-                }
-            
-            # Update the test case content
-            test_case.content = improved_test_content
-            db.session.commit()
-            
-            return {
-                "success": True,
-                "test_case": test_case.to_dict(),
-                "message": "Test case improved successfully"
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "message": "Failed to improve test case"
-            }
-    
-    def _extract_code_from_markdown(self, markdown_content):
-        """Extract code from markdown code blocks."""
-        lines = markdown_content.split('\n')
-        
-        # If first line contains the language identifier (```python)
-        if lines[0].startswith("```"):
-            lines = lines[1:]
-        
-        # If last line is just the closing tag
-        if lines[-1] == "```":
-            lines = lines[:-1]
-        
-        return '\n'.join(lines)
