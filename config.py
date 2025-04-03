@@ -11,9 +11,9 @@ class Config:
     DEBUG = False
     TESTING = False
     
-    # OpenAI configuration
-    OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
-    OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4o')
+    # DeepSeek configuration (replacing OpenAI)
+    DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY')
+    DEEPSEEK_MODEL = os.environ.get('DEEPSEEK_MODEL', 'deepseek-chat')
     
     # Database configuration
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
@@ -46,7 +46,7 @@ class ProductionConfig(Config):
         
         # Check for required environment variables
         assert os.environ.get('SECRET_KEY'), "SECRET_KEY environment variable not set"
-        assert os.environ.get('OPENAI_API_KEY'), "OPENAI_API_KEY environment variable not set"
+        assert os.environ.get('DEEPSEEK_API_KEY'), "DEEPSEEK_API_KEY environment variable not set"
 
 # Configuration dictionary
 config = {
