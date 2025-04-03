@@ -6,7 +6,7 @@ from database import db, Script, ScriptVersion
 from flask import current_app
 
 class CodingModule:
-    def __init__(self, app=None):
+    def __init__(self, app=None, timeout=5.0):
         """Initialize the coding module with DeepSeek API credentials from environment variable."""
         # Store Flask app reference if provided
         self.app = app
@@ -23,7 +23,12 @@ class CodingModule:
             raise ValueError("DEEPSEEK_API_KEY not set in environment or app config")
         
         # Initialize the OpenAI client with DeepSeek's base URL and API key
-        self.client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        # Set a shorter timeout to ensure we don't hit Vercel's 10s limit
+        self.client = OpenAI(
+            api_key=api_key, 
+            base_url="https://api.deepseek.com",
+            timeout=timeout
+        )
         self.dmp = diff_match_patch()
 
     def generate_script(self, prompt, language="python"):
@@ -48,8 +53,8 @@ class CodingModule:
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.2,
-                max_tokens=4000,
+                temperature=0.1,  # Lower temperature for faster, more consistent responses
+                max_tokens=2000,  # Limit token length to avoid timeouts
                 stream=True
             )
             
@@ -91,8 +96,8 @@ class CodingModule:
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": f"Debug the following code and identify/fix any issues:\n\n{script_content}"}
                 ],
-                temperature=0.2,
-                max_tokens=4000,
+                temperature=0.1,  # Lower temperature for faster, more consistent responses
+                max_tokens=2000,  # Limit token length to avoid timeouts
                 stream=True
             )
             
@@ -122,27 +127,19 @@ class CodingModule:
         Returns:
             dict: Modified script and explanation or a generator if streaming is enabled
         """
-        system_message = """You are an expert code modifier specializing in adapting existing code to new requirements.
-        Analyze the provided code and the modification request, and provide a modified version of the code that
-        addresses the requested changes. Include explanations for significant changes."""
+        system_message = """You are an expert code modifier specializing in updating existing code to meet new requirements.
+        Modify the provided code according to the user's request, maintaining the existing functionality while adding
+        the requested changes. Provide a clear explanation of the changes made."""
         
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_message},
-                    {"role": "user", "content": f"""Modify the following code according to this request:
-                    
-                    MODIFICATION REQUEST:
-                    {modification_request}
-                    
-                    CURRENT CODE:
-                    {script_content}
-                    
-                    Please provide the modified code and explain the changes you made."""}
+                    {"role": "user", "content": f"Modify this code according to this request: '{modification_request}'\n\n{script_content}"}
                 ],
-                temperature=0.2,
-                max_tokens=4000,
+                temperature=0.1,  # Lower temperature for faster, more consistent responses
+                max_tokens=2000,  # Limit token length to avoid timeouts
                 stream=True
             )
             
