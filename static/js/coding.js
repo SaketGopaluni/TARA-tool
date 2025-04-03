@@ -49,6 +49,7 @@ function handleGenerateScriptFormSubmit(form, promptInput, languageSelect, resul
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let accumulatedContent = '';
+                let initializing = true;
                 
                 while (true) {
                     const { value, done } = await reader.read();
@@ -65,6 +66,12 @@ function handleGenerateScriptFormSubmit(form, promptInput, languageSelect, resul
                                 if (data.error) {
                                     showToast(`Error: ${data.error}`, 'error');
                                     break;
+                                }
+                                
+                                if (data.initializing) {
+                                    console.log('Stream initialized');
+                                    initializing = false;
+                                    continue;
                                 }
                                 
                                 if (data.chunk) {
@@ -160,6 +167,7 @@ function handleDebugScriptFormSubmit(form, scriptContent, resultContainer) {
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let accumulatedContent = '';
+                let initializing = true;
                 
                 while (true) {
                     const { value, done } = await reader.read();
@@ -176,6 +184,12 @@ function handleDebugScriptFormSubmit(form, scriptContent, resultContainer) {
                                 if (data.error) {
                                     showToast(`Error: ${data.error}`, 'error');
                                     break;
+                                }
+                                
+                                if (data.initializing) {
+                                    console.log('Stream initialized');
+                                    initializing = false;
+                                    continue;
                                 }
                                 
                                 if (data.chunk) {
@@ -293,6 +307,7 @@ function handleModifyScriptFormSubmit(form, scriptContent, modificationRequest, 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let accumulatedContent = '';
+                let initializing = true;
                 
                 while (true) {
                     const { value, done } = await reader.read();
@@ -309,6 +324,12 @@ function handleModifyScriptFormSubmit(form, scriptContent, modificationRequest, 
                                 if (data.error) {
                                     showToast(`Error: ${data.error}`, 'error');
                                     break;
+                                }
+                                
+                                if (data.initializing) {
+                                    console.log('Stream initialized');
+                                    initializing = false;
+                                    continue;
                                 }
                                 
                                 if (data.chunk) {
