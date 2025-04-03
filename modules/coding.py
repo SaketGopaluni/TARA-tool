@@ -5,10 +5,16 @@ from diff_match_patch import diff_match_patch
 from database import db, Script, ScriptVersion
 
 class CodingModule:
-    def __init__(self, api_key, model):
-        """Initialize the coding module with API credentials."""
-        self.client = OpenAI(api_key=api_key, base_url="https://api.openai.com/v1")
-        self.model = model
+    def __init__(self):
+        """Initialize the coding module with DeepSeek API credentials from environment variable."""
+        # Fetch the API key from the environment variable DEEPSEEK_API_KEY
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        if not api_key:
+            raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
+        
+        # Initialize the OpenAI client with DeepSeek's base URL and API key
+        self.client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        self.model = "deepseek-chat"
         self.dmp = diff_match_patch()
 
     def generate_script(self, prompt, language="python"):
