@@ -56,8 +56,22 @@ document.addEventListener('DOMContentLoaded', function() {
             chatMessages.scrollTop = chatMessages.scrollHeight;
             
             try {
-                // Send message to the server
-                const result = await apiRequest('/api/chat/send', 'POST', { message, query_type: type });
+                // Create assistant message placeholder for streaming
+                const assistantMessageNode = assistantMessageTemplate.content.cloneNode(true);
+                const assistantMessageElement = assistantMessageNode.querySelector('.message-container');
+                assistantMessageElement.id = 'streaming-message';
+                const messageContent = assistantMessageNode.querySelector('.message-content');
+                messageContent.innerHTML = '<span class="typing-cursor"></span>';
+                
+                // Send message to the server with streaming enabled
+                const response = await fetch('/api/chat/send?stream=true', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify({ message, query_type: type })
+                });
                 
                 // Remove loading indicator
                 const indicator = document.getElementById('loading-indicator');
@@ -65,10 +79,63 @@ document.addEventListener('DOMContentLoaded', function() {
                     chatMessages.removeChild(indicator);
                 }
                 
-                if (result.success) {
-                    // Add assistant message to the chat
-                    addMessage('assistant', result.response);
+                if (response.ok) {
+                    // Add the placeholder message to the chat
+                    chatMessages.appendChild(assistantMessageElement);
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                    
+                    // Set up the event source and handle streaming
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let accumulatedContent = '';
+                    
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) break;
+                        
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n\n');
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.slice(6)); // Remove 'data: ' prefix
+                                    
+                                    if (data.error) {
+                                        showToast(`Error: ${data.error}`, 'error');
+                                        break;
+                                    }
+                                    
+                                    if (data.chunk) {
+                                        // Update the streaming message with the new chunk
+                                        accumulatedContent += data.chunk;
+                                        const processedContent = processMessageContent(accumulatedContent);
+                                        const streamingMessage = document.getElementById('streaming-message');
+                                        if (streamingMessage) {
+                                            const messageContent = streamingMessage.querySelector('.message-content');
+                                            messageContent.innerHTML = processedContent + '<span class="typing-cursor"></span>';
+                                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                                        }
+                                    }
+                                    
+                                    if (data.done) {
+                                        // Remove the typing cursor when done
+                                        const streamingMessage = document.getElementById('streaming-message');
+                                        if (streamingMessage) {
+                                            streamingMessage.id = ''; // Remove the ID
+                                            const messageContent = streamingMessage.querySelector('.message-content');
+                                            messageContent.innerHTML = processMessageContent(accumulatedContent);
+                                        }
+                                        break;
+                                    }
+                                } catch (e) {
+                                    console.error('Error parsing streaming data:', e);
+                                }
+                            }
+                        }
+                    }
                 } else {
+                    const result = await response.json();
                     showToast(result.message || 'Failed to send message', 'error');
                 }
             } catch (error) {
@@ -367,4 +434,29 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error loading chat history:', error);
         }
     }
+    
+    // Function to get CSRF token
+    function getCsrfToken() {
+        return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    }
 });
+
+// CSS for typing cursor
+document.head.insertAdjacentHTML('beforeend', `
+<style>
+.typing-cursor {
+    display: inline-block;
+    width: 5px;
+    height: 15px;
+    background-color: #000;
+    animation: blink 1s infinite;
+    margin-left: 2px;
+    vertical-align: middle;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+</style>
+`);
