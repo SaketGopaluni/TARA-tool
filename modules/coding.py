@@ -3,18 +3,27 @@ import json
 from openai import OpenAI
 from diff_match_patch import diff_match_patch
 from database import db, Script, ScriptVersion
+from flask import current_app
 
 class CodingModule:
-    def __init__(self):
+    def __init__(self, app=None):
         """Initialize the coding module with DeepSeek API credentials from environment variable."""
-        # Fetch the API key from the environment variable DEEPSEEK_API_KEY
-        api_key = os.getenv("DEEPSEEK_API_KEY")
+        # Store Flask app reference if provided
+        self.app = app
+        
+        # Fetch the API key from the environment or app config
+        if app:
+            api_key = app.config.get('DEEPSEEK_API_KEY')
+            self.model = app.config.get('DEEPSEEK_MODEL', 'deepseek-chat')
+        else:
+            api_key = os.getenv("DEEPSEEK_API_KEY")
+            self.model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+            
         if not api_key:
-            raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
+            raise ValueError("DEEPSEEK_API_KEY not set in environment or app config")
         
         # Initialize the OpenAI client with DeepSeek's base URL and API key
         self.client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-        self.model = "deepseek-chat"
         self.dmp = diff_match_patch()
 
     def generate_script(self, prompt, language="python"):
