@@ -22,7 +22,12 @@ class ChatModule:
             raise ValueError("DEEPSEEK_API_KEY not set in environment or app config")
         
         # Initialize the OpenAI client with DeepSeek's base URL and API key
-        self.client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        # Set a shorter timeout to ensure we don't hit Vercel's 10s limit
+        self.client = OpenAI(
+            api_key=api_key, 
+            base_url="https://api.deepseek.com",
+            timeout=5.0
+        )
         
         # Define prompt templates for different types of queries
         self.prompt_templates = {
@@ -125,8 +130,8 @@ class ChatModule:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=0.7,
-                max_tokens=2000,
+                temperature=0.1,  # Lower temperature for faster, more consistent responses
+                max_tokens=1500,  # Limit token length to avoid timeouts
                 stream=True
             )
             
