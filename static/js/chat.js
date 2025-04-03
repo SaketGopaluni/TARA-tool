@@ -106,6 +106,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                         break;
                                     }
                                     
+                                    if (data.initializing) {
+                                        console.log('Stream initialized');
+                                        continue;
+                                    }
+                                    
                                     if (data.chunk) {
                                         // Update the streaming message with the new chunk
                                         accumulatedContent += data.chunk;
