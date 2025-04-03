@@ -93,13 +93,12 @@ class ChatModule:
             # Get the chat session
             chat_session = ChatSession.query.filter_by(session_id=session_id).first()
             
+            # Auto-create the session if it doesn't exist
             if not chat_session:
-                return {
-                    "success": False,
-                    "error": "Chat session not found",
-                    "message": "Failed to send message: Chat session not found"
-                }
-            
+                chat_session = ChatSession(session_id=session_id)
+                db.session.add(chat_session)
+                db.session.commit()
+                
             # Create database entry for user message
             user_message = ChatMessage(
                 session_id=chat_session.id,
