@@ -10,16 +10,11 @@ from openai import OpenAI
 from database import db, Script, TestCase, TestResult
 
 class TestingModule:
-    def __init__(self):
-        """Initialize the testing module with DeepSeek API credentials from environment variable."""
-        # Fetch the API key from the environment variable DEEPSEEK_API_KEY
-        api_key = os.getenv("DEEPSEEK_API_KEY")
-        if not api_key:
-            raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
-        
+    def __init__(self, api_key, model):
+        """Initialize the testing module with API credentials."""
         # Initialize the OpenAI client with DeepSeek's base URL and API key
         self.client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-        self.model = "deepseek-chat"
+        self.model = model
     
     def generate_test_case(self, script_id, script_content, test_requirements):
         """
@@ -31,7 +26,7 @@ class TestingModule:
             test_requirements (str): Description of test requirements
         
         Returns:
-            dict: Generated test case
+            dict: Generated test case or a generator if streaming is enabled
         """
         system_message = """You are an expert in writing Python unit tests. Your task is to create
         comprehensive test cases for the provided code, following best practices for testing.
@@ -45,29 +40,16 @@ class TestingModule:
                     {"role": "user", "content": f"Write unit tests for the following code, according to these requirements: '{test_requirements}'\n\n{script_content}"}
                 ],
                 temperature=0.2,
-                max_tokens=4000
+                max_tokens=4000,
+                stream=True
             )
             
-            test_content = response.choices[0].message.content.strip()
-            
-            # Extract code from markdown code blocks if present
-            if test_content.startswith("```") and test_content.endswith("```"):
-                test_content = self._extract_code_from_markdown(test_content)
-            
-            # Create database entry
-            title = test_requirements.split('\n')[0].strip() if '\n' in test_requirements else test_requirements[:50] + "..."
-            test_case = TestCase(
-                script_id=script_id,
-                title=title,
-                content=test_content
-            )
-            db.session.add(test_case)
-            db.session.commit()
-            
+            # Return the streaming response
             return {
                 "success": True,
-                "test_case": test_case.to_dict(),
-                "message": "Test case generated successfully"
+                "stream": response,
+                "script_id": script_id,
+                "title": test_requirements.split('\n')[0].strip() if '\n' in test_requirements else test_requirements[:50] + "..."
             }
             
         except Exception as e:
@@ -187,7 +169,7 @@ class TestingModule:
             test_result_output (str): Output from the previous test execution
         
         Returns:
-            dict: Improved test case
+            dict: Improved test case or a generator if streaming is enabled
         """
         system_message = """You are an expert in improving Python unit tests. Your task is to analyze
         the provided test case, the script it's testing, and the execution results, and then make
@@ -203,3 +185,49 @@ class TestingModule:
                     SCRIPT:
                     ```python
                     {script_content}
+                    ```
+                    
+                    TEST CASE:
+                    ```python
+                    {test_content}
+                    ```
+                    
+                    EXECUTION RESULTS:
+                    ```
+                    {test_result_output}
+                    ```
+                    
+                    Please provide an improved version of the test case that addresses any issues."""}
+                ],
+                temperature=0.2,
+                max_tokens=4000,
+                stream=True
+            )
+            
+            # Return the streaming response
+            return {
+                "success": True,
+                "stream": response,
+                "test_case_id": test_case_id
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to improve test case"
+            }
+    
+    def _extract_code_from_markdown(self, markdown_content):
+        """Extract code from markdown code blocks."""
+        lines = markdown_content.split('\n')
+        
+        # If first line contains the language identifier (```python)
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        
+        # If last line is just the closing tag
+        if lines[-1] == "```":
+            lines = lines[:-1]
+        
+        return '\n'.join(lines)
