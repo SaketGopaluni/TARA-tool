@@ -29,12 +29,6 @@ class Config:
 class DevelopmentConfig(Config):
     DEBUG = True
 
-# Testing configuration
-class TestingConfig(Config):
-    TESTING = True
-    DEBUG = True
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
-
 # Production configuration
 class ProductionConfig(Config):
     DEBUG = False
@@ -54,7 +48,6 @@ class ProductionConfig(Config):
 # Configuration dictionary
 config = {
     'development': DevelopmentConfig,
-    'testing': TestingConfig,
     'production': ProductionConfig,
     
     # Default configuration
