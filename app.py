@@ -16,7 +16,7 @@ from modules.chat import ChatModule
 from modules.testing import TestingModule
 from modules.coding import CodingModule
 from database import db, ChatSession, ChatMessage, Script, ScriptVersion, TestCase, TestResult
-from config import get_config # Use get_config to load appropriate config
+from config import config # Import the config dictionary
 
 # Load environment variables
 load_dotenv()
@@ -24,9 +24,9 @@ load_dotenv()
 # Create Flask app
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
-# Load configuration using the helper function from config.py
-app_config = get_config()
-app.config.from_object(app_config)
+# Load configuration based on environment variable
+config_name = os.environ.get('FLASK_CONFIG') or 'default' # Use 'default' (development) if FLASK_CONFIG not set
+app.config.from_object(config[config_name]) # Load config from dictionary
 
 # Configure logging based on Flask debug setting
 if app.config['DEBUG']:
