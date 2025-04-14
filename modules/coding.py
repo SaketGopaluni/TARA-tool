@@ -3,7 +3,6 @@ from openai import OpenAI, OpenAIError
 import httpx
 from diff_match_patch import diff_match_patch
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
