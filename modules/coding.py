@@ -89,10 +89,13 @@ class CodingModule:
             logger.error(f"Error in generate_script: {e}")
             return f"Error generating script: {e}"
 
-    def debug_script(self, script_content):
+    def debug_script(self, script_content, error_log=''):
         """Debugs the provided script using OpenRouter, identifying issues and suggesting fixes."""
         system_prompt = "You are an expert code debugger. Analyze the following script, identify any bugs, security vulnerabilities, or potential issues. Provide a concise analysis of the problems found and then provide the corrected version of the script. Format your response clearly with 'Analysis:' section and 'Corrected Script:' section. Output ONLY the analysis and the raw corrected code, without any other introduction or explanation."
-        user_prompt = f"Script to debug:\n```\n{script_content}\n```"
+        
+        # Include error log in user prompt if provided
+        error_info = f"\n\nError log/description: {error_log}" if error_log else ""
+        user_prompt = f"Script to debug:\n```\n{script_content}\n```{error_info}"
 
         try:
             response = self._call_openrouter(system_prompt, user_prompt)
