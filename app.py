@@ -134,11 +134,15 @@ def generate_script():
         
     try:
         data = request.json
+        logger.info(f"Received data in generate_script: {data}")
         language = data.get('language')
         requirements = data.get('requirements')
         script_name = data.get('script_name', 'Generated Script') # Optional name from frontend
+        
+        logger.info(f"Parsed parameters - language: {language}, requirements exists: {requirements is not None}, script_name: {script_name}")
 
         if not language or not requirements:
+            logger.error(f"Missing parameters - language: {language}, requirements: {requirements}")
             return jsonify({"success": False, "error": "Missing language or requirements"}), 400
 
         # Call the refactored module method (non-streaming)
@@ -366,6 +370,7 @@ def generate_test_case():
          
     try:
         data = request.json
+        logger.info(f"Received data in generate_test_case: {data}")
         script_id = data.get('script_id')
         # Fetch script content and language from DB based on script_id
         # script_content = data.get('script_content') # No longer needed in request
@@ -373,16 +378,19 @@ def generate_test_case():
         requirements = data.get('requirements', 'Generate standard unit tests.') # Optional requirements
 
         if not script_id:
+            logger.error(f"Missing script_id: {script_id}")
             return jsonify({"success": False, "error": "Missing script_id"}), 400
 
         script = Script.query.get(script_id)
         if not script:
+            logger.error(f"Script not found for ID: {script_id}")
             return jsonify({"success": False, "error": "Script not found"}), 404
         
         script_content = script.content
         language = script.language
 
         if not script_content or not language:
+             logger.error(f"Missing script content or language for script ID: {script_id}")
              return jsonify({"success": False, "error": "Script content or language missing in database for the selected script."}), 400
 
         logger.debug(f"Calling testing_module.generate_test_cases for script ID: {script_id} ({language})")
