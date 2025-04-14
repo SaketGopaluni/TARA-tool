@@ -41,7 +41,7 @@ function handleGenerateScriptFormSubmit(form, promptInput, languageSelect, resul
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCsrfToken() 
                 },
-                body: JSON.stringify({ prompt, language })
+                body: JSON.stringify({ requirements: prompt, language })
             });
             
             const result = await response.json(); 
