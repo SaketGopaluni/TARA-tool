@@ -1,376 +1,183 @@
-import os
-import json
-from openai import OpenAI
+import logging
+from openai import OpenAI, OpenAIError
 from diff_match_patch import diff_match_patch
-from database import db, Script, ScriptVersion
-from flask import current_app
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class CodingModule:
-    def __init__(self, app=None, timeout=5.0):
-        """Initialize the coding module with DeepSeek API credentials from environment variable."""
-        # Store Flask app reference if provided
-        self.app = app
-        
-        # Fetch the API key from the environment or app config
-        if app:
-            api_key = app.config.get('DEEPSEEK_API_KEY')
-            self.model = app.config.get('DEEPSEEK_MODEL', 'deepseek-chat')
-        else:
-            api_key = os.getenv("DEEPSEEK_API_KEY")
-            self.model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-            
-        if not api_key:
-            raise ValueError("DEEPSEEK_API_KEY not set in environment or app config")
-        
-        # Initialize the OpenAI client with DeepSeek's base URL and API key
-        # Set a shorter timeout to ensure we don't hit Vercel's 10s limit
-        self.client = OpenAI(
-            api_key=api_key, 
-            base_url="https://api.deepseek.com",
-            timeout=timeout
-        )
-        self.dmp = diff_match_patch()
+    """Handles script generation, debugging, and modification using an AI model via OpenRouter."""
 
-    def generate_script(self, prompt, language="python"):
-        """
-        Generate a new script based on the provided prompt.
-        
-        Args:
-            prompt (str): Description of the script to generate
-            language (str): Programming language for the script
-        
-        Returns:
-            dict: Generated script and metadata or a generator if streaming is enabled
-        """
-        system_message = f"""You are an expert {language} developer specializing in cybersecurity and
-        automotive systems. Generate a well-commented, production-ready script based on the user's requirements.
-        Focus on security best practices, error handling, and maintainability."""
-        
+    def __init__(self, config):
+        """Initialize the CodingModule with application configuration."""
+        if not config.get('OPENROUTER_API_KEY'):
+            raise ValueError("OpenRouter API key not found in configuration.")
+            
+        self.client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=config['OPENROUTER_API_KEY'],
+        )
+        self.model = config.get('OPENROUTER_MODEL', 'meta-llama/llama-4-maverick:free')
+        self.site_url = config.get('YOUR_SITE_URL') 
+        self.site_name = config.get('YOUR_SITE_NAME') 
+        self.extra_headers = {}
+        if self.site_url:
+            self.extra_headers["HTTP-Referer"] = self.site_url
+        if self.site_name:
+            self.extra_headers["X-Title"] = self.site_name
+
+    def _call_openrouter(self, system_prompt, user_prompt):
+        """Helper method to make calls to the OpenRouter API."""
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
         try:
-            response = self.client.chat.completions.create(
+            logger.info(f"Calling OpenRouter model: {self.model} with headers: {self.extra_headers}")
+            completion = self.client.chat.completions.create(
+                extra_headers=self.extra_headers,
                 model=self.model,
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.1,  # Lower temperature for faster, more consistent responses
-                max_tokens=2000,  # Limit token length to avoid timeouts
-                stream=True
+                messages=messages,
+                temperature=0.7, # Adjust temperature as needed
+                max_tokens=2048 # Adjust max tokens as needed
             )
-            
-            # Return the streaming response
-            title = prompt.split('\n')[0].strip() if '\n' in prompt else prompt[:50] + "..."
-            return {
-                "success": True,
-                "stream": response,
-                "title": title,
-                "language": language
-            }
-            
+            response_content = completion.choices[0].message.content
+            logger.info("OpenRouter call successful.")
+            return response_content.strip()
+        except OpenAIError as e:
+            logger.error(f"OpenRouter API call failed: {e}")
+            raise
         except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "message": "Failed to generate script"
-            }
-    
-    def debug_script(self, script_id, script_content):
-        """
-        Debug an existing script and identify/fix errors.
-        
-        Args:
-            script_id (int): ID of the script to debug
-            script_content (str): Current content of the script
-        
-        Returns:
-            dict: Debugged script and explanation or a generator if streaming is enabled
-        """
-        system_message = """You are an expert code debugger specializing in identifying and fixing errors in code.
-        Analyze the provided code, identify any bugs, errors, or potential issues, and provide a fixed version
-        of the code along with explanations for each fix."""
+            logger.error(f"An unexpected error occurred during OpenRouter call: {e}")
+            raise
+
+    def generate_script(self, language, requirements):
+        """Generates a script based on language and requirements using OpenRouter."""
+        system_prompt = f"You are an expert programmer specializing in {language} for automotive cybersecurity applications. Generate a complete, well-commented, and functional script based ONLY on the user's requirements. Output ONLY the raw code for the script, without any introduction, explanation, or surrounding text."
+        user_prompt = f"Language: {language}\nRequirements: {requirements}"
         
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": f"Debug the following code and identify/fix any issues:\n\n{script_content}"}
-                ],
-                temperature=0.1,  # Lower temperature for faster, more consistent responses
-                max_tokens=2000,  # Limit token length to avoid timeouts
-                stream=True
-            )
-            
-            # Return the streaming response
-            return {
-                "success": True,
-                "stream": response,
-                "script_id": script_id
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "message": "Failed to debug script"
-            }
-    
-    def modify_script(self, script_id, script_content, modification_request):
-        """
-        Modify an existing script based on the provided request.
-        
-        Args:
-            script_id (int): ID of the script to modify
-            script_content (str): Current content of the script
-            modification_request (str): Description of the requested modifications
-        
-        Returns:
-            dict: Modified script and explanation or a generator if streaming is enabled
-        """
-        system_message = """You are an expert code modifier specializing in updating existing code to meet new requirements.
-        Modify the provided code according to the user's request, maintaining the existing functionality while adding
-        the requested changes. Provide a clear explanation of the changes made."""
-        
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": f"Modify this code according to this request: '{modification_request}'\n\n{script_content}"}
-                ],
-                temperature=0.1,  # Lower temperature for faster, more consistent responses
-                max_tokens=2000,  # Limit token length to avoid timeouts
-                stream=True
-            )
-            
-            # Return the streaming response
-            return {
-                "success": True,
-                "stream": response,
-                "script_id": script_id
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "message": "Failed to modify script"
-            }
-    
-    def explain_changes(self, old_content, new_content):
-        """
-        Generate an explanation of the changes between two versions of a script.
-        
-        Args:
-            old_content (str): Previous content of the script
-            new_content (str): New content of the script
-        
-        Returns:
-            dict: Explanation of changes and diff visualization or a generator if streaming is enabled
-        """
-        system_message = """You are an expert code reviewer specializing in analyzing code changes.
-        Examine the changes between the old and new versions of the code, and provide a clear,
-        concise explanation of the changes, focusing on functionality, performance, and security impacts."""
-        
-        try:
-            # Generate visual diff for display
-            self.dmp.Diff_Timeout = 5.0  # Increase timeout for larger files
-            diffs = self.dmp.diff_main(old_content, new_content)
-            self.dmp.diff_cleanupSemantic(diffs)
-            diff_html = self.dmp.diff_prettyHtml(diffs)
-            
-            # Remove css styling from the output for better display in the app
-            diff_html = diff_html.replace('style="background:#e6ffe6;"', 'class="diff-add"')
-            diff_html = diff_html.replace('style="background:#ffe6e6;"', 'class="diff-del"')
-            
-            # Call DeepSeek API for explanation
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": f"""Explain the changes between these two versions of code:
-                    
-                    ORIGINAL CODE:
-                    ```
-                    {old_content}
-                    ```
-                    
-                    NEW CODE:
-                    ```
-                    {new_content}
-                    ```
-                    
-                    Please provide a clear, concise explanation of the changes."""}
-                ],
-                temperature=0.3,
-                max_tokens=2000,
-                stream=True
-            )
-            
-            # Return the streaming response and the diff HTML
-            return {
-                "success": True,
-                "stream": response,
-                "diff_html": diff_html
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "message": "Failed to explain changes"
-            }
-    
-    def compare_versions(self, script_id, version1_id, version2_id):
-        """
-        Compare two versions of a script and return the diff.
-        
-        Args:
-            script_id (int): ID of the script
-            version1_id (int): ID of the first version
-            version2_id (int): ID of the second version
-        
-        Returns:
-            dict: Diff visualization and metadata
-        """
-        try:
-            # Get the script and versions
-            script = Script.query.get(script_id)
-            
-            if not script:
-                return {
-                    "success": False,
-                    "error": "Script not found",
-                    "message": "Failed to compare versions: Script not found"
-                }
-            
-            version1 = ScriptVersion.query.get(version1_id)
-            version2 = ScriptVersion.query.get(version2_id)
-            
-            if not version1 or not version2:
-                return {
-                    "success": False,
-                    "error": "One or both versions not found",
-                    "message": "Failed to compare versions: One or both versions not found"
-                }
-            
-            # Generate diff
-            diffs = self.dmp.diff_main(version1.content, version2.content)
-            self.dmp.diff_cleanupSemantic(diffs)
-            diff_html = self.dmp.diff_prettyHtml(diffs)
-            
-            # Get explanation from the newer version
-            explanation = version2.changes if version2.version > version1.version else version1.changes
-            
-            return {
-                "success": True,
-                "script": script.to_dict(),
-                "version1": version1.to_dict(),
-                "version2": version2.to_dict(),
-                "diff_html": diff_html,
-                "explanation": explanation,
-                "message": "Versions compared successfully"
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "message": "Failed to compare versions"
-            }
-    
-    def get_script_versions(self, script_id):
-        """
-        Get all versions of a script.
-        
-        Args:
-            script_id (int): ID of the script
-        
-        Returns:
-            dict: List of script versions
-        """
-        try:
-            script = Script.query.get(script_id)
-            
-            if not script:
-                return {
-                    "success": False,
-                    "error": "Script not found",
-                    "message": "Failed to get script versions: Script not found"
-                }
-            
-            versions = ScriptVersion.query.filter_by(script_id=script_id).order_by(ScriptVersion.version).all()
-            
-            return {
-                "success": True,
-                "script": script.to_dict(),
-                "versions": [version.to_dict() for version in versions],
-                "message": f"Retrieved {len(versions)} versions successfully"
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "message": "Failed to get script versions"
-            }
-    
-    def _extract_code_from_markdown(self, markdown_content):
-        """Extract code from markdown code blocks."""
-        lines = markdown_content.split('\n')
-        
-        # If first line contains the language identifier (```python)
-        if lines[0].startswith("```"):
-            lines = lines[1:]
-        
-        # If last line is just the closing tag
-        if lines[-1] == "```":
-            lines = lines[:-1]
-        
-        return '\n'.join(lines)
-    
-    def _extract_code_and_explanation(self, content):
-        """
-        Extract code and explanation from AI response.
-        
-        Returns:
-            tuple: (code, explanation)
-        """
-        # Check if response contains a code block
-        if "```" in content:
-            explanation_parts = []
-            code_parts = []
-            in_code_block = False
-            
-            for line in content.split('\n'):
-                if line.startswith("```"):
-                    in_code_block = not in_code_block
-                    continue
-                
-                if in_code_block:
-                    code_parts.append(line)
+            generated_code = self._call_openrouter(system_prompt, user_prompt)
+            # Post-processing: Ensure it looks like code, remove potential ``` markdown
+            if generated_code.startswith(f"```{language}"):
+                generated_code = generated_code[len(f"```{language}\n"):]
+            if generated_code.startswith("```"):
+                lines = generated_code.split('\n', 1)
+                if len(lines) > 1:
+                    generated_code = lines[1] # Skip the first line like ```python
                 else:
-                    explanation_parts.append(line)
+                    generated_code = generated_code[3:] # Just remove ```
+            if generated_code.endswith("\n```"):
+                generated_code = generated_code[:-4]
+            elif generated_code.endswith("```"):
+                generated_code = generated_code[:-3]
+
+            return generated_code
+        except Exception as e:
+            logger.error(f"Error in generate_script: {e}")
+            return f"Error generating script: {e}"
+
+    def debug_script(self, script_content):
+        """Debugs the provided script using OpenRouter, identifying issues and suggesting fixes."""
+        system_prompt = "You are an expert code debugger. Analyze the following script, identify any bugs, security vulnerabilities, or potential issues. Provide a concise analysis of the problems found and then provide the corrected version of the script. Format your response clearly with 'Analysis:' section and 'Corrected Script:' section. Output ONLY the analysis and the raw corrected code, without any other introduction or explanation."
+        user_prompt = f"Script to debug:\n```\n{script_content}\n```"
+
+        try:
+            response = self._call_openrouter(system_prompt, user_prompt)
             
-            code = '\n'.join(code_parts)
-            explanation = '\n'.join(explanation_parts).strip()
+            # Parse the response to separate analysis and fixed code
+            analysis = "Could not parse analysis from response."
+            fixed_code = "Could not parse corrected script from response."
             
-        else:
-            # No code block found, try to infer code and explanation
-            lines = content.split('\n')
+            analysis_marker = "Analysis:"
+            code_marker = "Corrected Script:"
             
-            # Assume first few lines are explanation
-            for i, line in enumerate(lines):
-                if line.strip() and (line.strip().startswith("def ") or 
-                                    line.strip().startswith("class ") or 
-                                    line.strip().startswith("import ") or 
-                                    line.strip().startswith("# ")):
-                    explanation = '\n'.join(lines[:i]).strip()
-                    code = '\n'.join(lines[i:]).strip()
-                    break
-            else:
-                # If no clear code indicators found, make a best guess
-                explanation = content
-                code = ""
+            analysis_start = response.find(analysis_marker)
+            code_start = response.find(code_marker)
+            
+            if analysis_start != -1 and code_start != -1:
+                analysis = response[analysis_start + len(analysis_marker):code_start].strip()
+                fixed_code = response[code_start + len(code_marker):].strip()
+            elif analysis_start != -1: # Found analysis but not code marker
+                analysis = response[analysis_start + len(analysis_marker):].strip()
+                fixed_code = "Corrected script not found after analysis."
+            elif code_start != -1: # Found code but not analysis marker
+                fixed_code = response[code_start + len(code_marker):].strip()
+                analysis = "Analysis section not found before corrected script."
+            else: # Couldn't find either marker
+                # Assume the model might have just outputted the code if the analysis was simple
+                # Or maybe it just gave analysis. Let's try to detect if it looks like code.
+                # This is a heuristic and might need refinement.
+                if 'def ' in response or 'class ' in response or 'function ' in response or 'main(' in response or '{' in response or ';' in response:
+                    fixed_code = response # Assume it's mostly code
+                    analysis = "Analysis not explicitly found, assuming direct code correction or simple issue."
+                else:
+                    analysis = response # Assume it's mostly analysis
+                    fixed_code = script_content # Return original script if no correction found
+
+            # Clean up potential markdown in fixed_code
+            if fixed_code.startswith("```"):
+                lines = fixed_code.split('\n', 1)
+                if len(lines) > 1:
+                    fixed_code = lines[1] # Skip the first line like ```python
+                else:
+                    fixed_code = fixed_code[3:] # Just remove ```
+            if fixed_code.endswith("\n```"):
+                fixed_code = fixed_code[:-4]
+            elif fixed_code.endswith("```"):
+                fixed_code = fixed_code[:-3]
+
+            return {
+                "analysis": analysis,
+                "fixed_code": fixed_code
+            }
+        except Exception as e:
+            logger.error(f"Error in debug_script: {e}")
+            return {
+                "analysis": f"Error during debugging: {e}",
+                "fixed_code": script_content # Return original script on error
+            }
+
+    def modify_script(self, script_content, modification_prompt):
+        """Modifies the provided script based on the modification prompt using OpenRouter."""
+        system_prompt = "You are an expert programmer. Modify the following script based ONLY on the user's instructions. Output ONLY the raw modified code, without any introduction, explanation, or surrounding text."
+        user_prompt = f"Script to modify:\n```\n{script_content}\n```\n\nModification instructions: {modification_prompt}"
         
-        return code, explanation
+        try:
+            modified_code = self._call_openrouter(system_prompt, user_prompt)
+            # Post-processing: Ensure it looks like code, remove potential ``` markdown
+            if modified_code.startswith("```"):
+                lines = modified_code.split('\n', 1)
+                if len(lines) > 1:
+                    modified_code = lines[1] # Skip the first line like ```python
+                else:
+                    modified_code = modified_code[3:] # Just remove ```
+            if modified_code.endswith("\n```"):
+                modified_code = modified_code[:-4]
+            elif modified_code.endswith("```"):
+                modified_code = modified_code[:-3]
+            
+            return modified_code
+        except Exception as e:
+            logger.error(f"Error in modify_script: {e}")
+            return f"Error modifying script: {e}"
+
+    @staticmethod
+    def calculate_diff(text1, text2):
+        """Calculates the difference between two texts using diff-match-patch."""
+        dmp = diff_match_patch()
+        diffs = dmp.diff_main(text1, text2)
+        dmp.diff_cleanupSemantic(diffs)
+        
+        # Format diff for HTML display (similar to GitHub diff view)
+        html_diff = []
+        for (op, data) in diffs:
+            text = data.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "&para;\n")
+            if op == dmp.DIFF_INSERT:
+                html_diff.append(f'<span class="diff-line-added">+{text}</span>')
+            elif op == dmp.DIFF_DELETE:
+                html_diff.append(f'<span class="diff-line-removed">-{text}</span>')
+            elif op == dmp.DIFF_EQUAL:
+                html_diff.append(f'<span>{text}</span>')
+        return "".join(html_diff)
