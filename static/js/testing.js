@@ -49,103 +49,83 @@ document.addEventListener('DOMContentLoaded', function() {
         generateTestForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            // Show loading state
-            generateTestForm.querySelector('button[type="submit"]').disabled = true;
-            generateTestForm.querySelector('button[type="submit"]').innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Generating...';
+            const submitButton = generateTestForm.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Generating...';
             
-            // Get form data
+            // Get form data - Use script ID and requirements
             const script_id = testSelectScript.value;
-            const script_content = testScriptContent.value;
-            const test_requirements = testRequirements.value;
+            const requirements = testRequirements.value.trim(); // Changed from test_requirements
+            // const script_content = testScriptContent.value; // No longer needed in request
             
+            if (!script_id) {
+                showToast('Please select a script', 'error');
+                submitButton.disabled = false;
+                submitButton.innerHTML = 'Generate Test Case';
+                return;
+            }
+
+            // Prepare result area
+            generateTestResult.classList.remove('hidden');
+            testTitle.textContent = 'Generating Test Case...';
+            testCode.textContent = 'Please wait...';
+            hljs.highlightElement(testCode);
+            if(copyTestResult) copyTestResult.disabled = true;
+
             try {
-                // Initialize the code output area with a placeholder for streaming
-                testCode.textContent = '';
-                testCode.innerHTML = '<span class="typing-cursor"></span>';
-                generateTestResult.classList.remove('hidden');
-                testTitle.textContent = test_requirements.split('\n')[0].trim() || 'Test Case';
-                
-                // Send request to API with streaming enabled
-                const response = await fetch('/api/testing/generate?stream=true', {
+                // Send request to API (non-streaming)
+                const response = await fetch('/api/testing/generate', { // Removed ?stream=true
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRFToken': getCsrfToken()
+                        'X-CSRFToken': getCsrfToken() // Assuming CSRF is needed
                     },
                     body: JSON.stringify({ 
-                        script_id, 
-                        script_content, 
-                        test_requirements 
+                        script_id: script_id, 
+                        requirements: requirements // Send requirements
+                        // script_content: script_content, // Removed
+                        // test_requirements: test_requirements // Renamed and value taken from requirements
                     })
                 });
                 
-                if (response.ok) {
-                    // Set up the reader for the stream
-                    const reader = response.body.getReader();
-                    const decoder = new TextDecoder();
-                    let accumulatedContent = '';
+                const result = await response.json(); // Get full JSON response
+
+                if (response.ok && result.success) {
+                    // --- Response Handling --- 
+                    const testCaseData = result.test_case; // Backend returns {'success': true, 'test_case': tc_obj}
+
+                    testTitle.textContent = testCaseData.title || 'Generated Test Case';
+                    testCode.textContent = testCaseData.content;
                     
-                    while (true) {
-                        const { value, done } = await reader.read();
-                        if (done) break;
-                        
-                        const chunk = decoder.decode(value);
-                        const lines = chunk.split('\n\n');
-                        
-                        for (const line of lines) {
-                            if (line.startsWith('data: ')) {
-                                try {
-                                    const data = JSON.parse(line.slice(6)); // Remove 'data: ' prefix
-                                    
-                                    if (data.error) {
-                                        showToast(`Error: ${data.error}`, 'error');
-                                        break;
-                                    }
-                                    
-                                    if (data.initializing) {
-                                        console.log('Stream initialized');
-                                        continue;
-                                    }
-                                    
-                                    if (data.chunk) {
-                                        // Update the content with the new chunk
-                                        accumulatedContent += data.chunk;
-                                        testCode.textContent = accumulatedContent;
-                                        testCode.innerHTML = testCode.textContent + '<span class="typing-cursor"></span>';
-                                        
-                                        // Highlight the code
-                                        hljs.highlightElement(testCode);
-                                        
-                                        // Add the cursor back
-                                        testCode.innerHTML = testCode.innerHTML + '<span class="typing-cursor"></span>';
-                                    }
-                                    
-                                    if (data.done) {
-                                        // Remove the typing cursor when done
-                                        testCode.textContent = accumulatedContent;
-                                        hljs.highlightElement(testCode);
-                                        
-                                        // Refresh the test case list
-                                        loadTestCases(script_id);
-                                        showToast("Test case generated successfully", 'success');
-                                        break;
-                                    }
-                                } catch (e) {
-                                    console.error('Error parsing streaming data:', e);
-                                }
-                            }
-                        }
-                    }
+                    // Highlight the code
+                    hljs.highlightElement(testCode);
+
+                    // Enable copy button
+                    if(copyTestResult) copyTestResult.disabled = false;
+                    
+                    // Reload test cases in other tabs (optional, depends on desired UX)
+                    loadTestCases(script_id, executeSelectTest); 
+                    loadTestCases(script_id, improveSelectTest);
+
+                    showToast("Test case generated successfully", 'success');
+
                 } else {
-                    const result = await response.json();
-                    showToast(result.message || 'Failed to generate test case', 'error');
+                    // Handle error from API response
+                    const errorMessage = result.error || 'Failed to generate test case';
+                    testTitle.textContent = 'Error';
+                    testCode.textContent = errorMessage;
+                    showToast(errorMessage, 'error');
                 }
+
             } catch (error) {
+                console.error('Error generating test case:', error);
+                testTitle.textContent = 'Error';
+                testCode.textContent = `An error occurred: ${error.message}`;
                 showToast(`Error: ${error.message}`, 'error');
             } finally {
                 // Reset loading state
-                generateTestForm.querySelector('button[type="submit"]').disabled = false;
-                generateTestForm.querySelector('button[type="submit"]').innerHTML = 'Generate Test Case';
+                submitButton.disabled = false;
+                submitButton.innerHTML = 'Generate Test Case';
             }
         });
     }
@@ -155,174 +135,97 @@ document.addEventListener('DOMContentLoaded', function() {
         executeTestForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            // Show loading state
-            executeTestForm.querySelector('button[type="submit"]').disabled = true;
-            executeTestForm.querySelector('button[type="submit"]').innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Executing...';
+            const submitButton = executeTestForm.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Executing...';
             
             // Get form data
             const test_case_id = executeSelectTest.value;
-            const test_content = executeTestContent.value;
-            const script_content = executeScriptContent.value;
+            // script_content and test_content are fetched by backend using ID
             
+            if (!test_case_id) {
+                 showToast('Please select a test case to execute', 'error');
+                 submitButton.disabled = false;
+                 submitButton.innerHTML = 'Execute Test';
+                 return;
+            }
+
+            // Prepare result area
+            executeTestResult.classList.remove('hidden');
+            testStatusBadge.textContent = 'Running...';
+            testStatusBadge.className = 'badge bg-secondary';
+            testOutput.textContent = 'Executing test...';
+            // testExecutionTime.textContent = 'N/A'; // Remove or hide this
+            testTimestamp.textContent = new Date().toLocaleString();
+
             try {
-                const result = await apiRequest('/api/testing/execute', 'POST', { 
-                    test_case_id, 
-                    test_content, 
-                    script_content 
+                // Send request to API
+                const response = await fetch('/api/testing/execute', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken() // Assuming CSRF needed
+                    },
+                    body: JSON.stringify({ 
+                        test_case_id: test_case_id 
+                    })
                 });
                 
+                const result = await response.json(); // Get full JSON response
+
                 if (result.success) {
-                    // Update the UI with the test results
-                    testStatusBadge.textContent = result.test_result.status.toUpperCase();
+                    // --- Response Handling --- 
+                    const testResultData = result.test_result; // Backend returns {'success': true, 'test_result': res_obj}
                     
-                    // Set status badge color
-                    if (result.test_result.status === 'passed') {
-                        testStatusBadge.classList.add('bg-green-100', 'text-green-800');
-                        testStatusBadge.classList.remove('bg-red-100', 'text-red-800', 'bg-yellow-100', 'text-yellow-800');
-                    } else if (result.test_result.status === 'failed') {
-                        testStatusBadge.classList.add('bg-red-100', 'text-red-800');
-                        testStatusBadge.classList.remove('bg-green-100', 'text-green-800', 'bg-yellow-100', 'text-yellow-800');
-                    } else {
-                        testStatusBadge.classList.add('bg-yellow-100', 'text-yellow-800');
-                        testStatusBadge.classList.remove('bg-green-100', 'text-green-800', 'bg-red-100', 'text-red-800');
+                    testStatusBadge.textContent = testResultData.status;
+                    // Set badge color based on status
+                    if (testResultData.status === 'passed') {
+                        testStatusBadge.className = 'badge bg-success';
+                    } else if (testResultData.status === 'failed') {
+                        testStatusBadge.className = 'badge bg-danger';
+                    } else { // error or other
+                        testStatusBadge.className = 'badge bg-warning text-dark'; // Use warning for errors
                     }
                     
-                    // Set execution time
-                    testExecutionTime.textContent = `${result.test_result.execution_time.toFixed(3)} seconds`;
+                    // Display output
+                    testOutput.textContent = testResultData.output || 'No output captured.';
                     
-                    // Set timestamp
-                    testTimestamp.textContent = new Date(result.test_result.created_at).toLocaleString();
+                    // Update timestamp if available in response (it is in the model)
+                    testTimestamp.textContent = new Date(testResultData.created_at).toLocaleString();
+                    // testExecutionTime.textContent = `${result.execution_time || 0}s`; // Not provided by backend
                     
-                    // Set output
-                    testOutput.textContent = result.test_result.output || 'No output';
-                    
-                    // Show the result
-                    executeTestResult.classList.remove('hidden');
-                    
-                    // Scroll to the result
-                    executeTestResult.scrollIntoView({ behavior: 'smooth' });
-                    
-                    showToast(`Test executed with status: ${result.test_result.status}`, 
-                        result.test_result.status === 'passed' ? 'success' : 
-                        result.test_result.status === 'failed' ? 'error' : 'info');
+                    showToast("Test execution completed", 'success');
+
                 } else {
-                    showToast(result.message || 'Failed to execute test', 'error');
+                    // Handle API error
+                    const errorMessage = result.error || 'Failed to execute test case';
+                    testStatusBadge.textContent = 'Error';
+                    testStatusBadge.className = 'badge bg-danger';
+                    testOutput.textContent = errorMessage;
+                    showToast(errorMessage, 'error');
                 }
+                
             } catch (error) {
+                console.error('Error executing test case:', error);
+                testStatusBadge.textContent = 'Error';
+                testStatusBadge.className = 'badge bg-danger';
+                testOutput.textContent = `Client-side error: ${error.message}`;
                 showToast(`Error: ${error.message}`, 'error');
             } finally {
                 // Reset loading state
-                executeTestForm.querySelector('button[type="submit"]').disabled = false;
-                executeTestForm.querySelector('button[type="submit"]').innerHTML = 'Execute Test';
+                submitButton.disabled = false;
+                submitButton.innerHTML = 'Execute Test';
             }
         });
     }
     
-    // Improve Test Case Form Submit
+    // Improve Test Case Form Submit - Disabled
     if (improveTestForm) {
         improveTestForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            // Show loading state
-            improveTestForm.querySelector('button[type="submit"]').disabled = true;
-            improveTestForm.querySelector('button[type="submit"]').innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Improving...';
-            
-            // Get form data
-            const test_case_id = improveSelectTest.value;
-            const test_content = improveTestContent.value;
-            const script_content = improveScriptContent.value;
-            const test_result_output = document.getElementById('improve-test-result').value;
-            
-            try {
-                // Initialize the code output area with a placeholder for streaming
-                improvedTestCode.textContent = '';
-                improvedTestCode.innerHTML = '<span class="typing-cursor"></span>';
-                document.getElementById('improved-test-result').classList.remove('hidden');
-                improvedTestTitle.textContent = 'Improved Test Case';
-                
-                // Send request to API with streaming enabled
-                const response = await fetch('/api/testing/improve?stream=true', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getCsrfToken()
-                    },
-                    body: JSON.stringify({ 
-                        test_case_id, 
-                        test_content, 
-                        script_content,
-                        test_result_output
-                    })
-                });
-                
-                if (response.ok) {
-                    // Set up the reader for the stream
-                    const reader = response.body.getReader();
-                    const decoder = new TextDecoder();
-                    let accumulatedContent = '';
-                    
-                    while (true) {
-                        const { value, done } = await reader.read();
-                        if (done) break;
-                        
-                        const chunk = decoder.decode(value);
-                        const lines = chunk.split('\n\n');
-                        
-                        for (const line of lines) {
-                            if (line.startsWith('data: ')) {
-                                try {
-                                    const data = JSON.parse(line.slice(6)); // Remove 'data: ' prefix
-                                    
-                                    if (data.error) {
-                                        showToast(`Error: ${data.error}`, 'error');
-                                        break;
-                                    }
-                                    
-                                    if (data.initializing) {
-                                        console.log('Stream initialized');
-                                        continue;
-                                    }
-                                    
-                                    if (data.chunk) {
-                                        // Update the content with the new chunk
-                                        accumulatedContent += data.chunk;
-                                        improvedTestCode.textContent = accumulatedContent;
-                                        improvedTestCode.innerHTML = improvedTestCode.textContent + '<span class="typing-cursor"></span>';
-                                        
-                                        // Highlight the code
-                                        hljs.highlightElement(improvedTestCode);
-                                        
-                                        // Add the cursor back
-                                        improvedTestCode.innerHTML = improvedTestCode.innerHTML + '<span class="typing-cursor"></span>';
-                                    }
-                                    
-                                    if (data.done) {
-                                        // Remove the typing cursor when done
-                                        improvedTestCode.textContent = accumulatedContent;
-                                        hljs.highlightElement(improvedTestCode);
-                                        
-                                        // Refresh the test case list
-                                        loadTestCases(improveSelectScript.value);
-                                        showToast("Test case improved successfully", 'success');
-                                        break;
-                                    }
-                                } catch (e) {
-                                    console.error('Error parsing streaming data:', e);
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    const result = await response.json();
-                    showToast(result.message || 'Failed to improve test case', 'error');
-                }
-            } catch (error) {
-                showToast(`Error: ${error.message}`, 'error');
-            } finally {
-                // Reset loading state
-                improveTestForm.querySelector('button[type="submit"]').disabled = false;
-                improveTestForm.querySelector('button[type="submit"]').innerHTML = 'Improve Test Case';
-            }
+            // Show 'Not Implemented' message and do nothing else
+            showToast('The "Improve Test Case" feature is currently not available.', 'info');
         });
     }
     
