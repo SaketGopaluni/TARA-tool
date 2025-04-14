@@ -1,6 +1,7 @@
 import logging
 from openai import OpenAI, OpenAIError
 import os
+import httpx
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -14,9 +15,13 @@ class ChatModule:
         if not config.get('OPENROUTER_API_KEY'):
             raise ValueError("OpenRouter API key not found in configuration.")
             
+        # Create an httpx client that doesn't trust environment proxy settings
+        httpx_client = httpx.Client(trust_env=False)
+            
         self.client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=config['OPENROUTER_API_KEY'],
+            http_client=httpx_client
         )
         self.model = config.get('OPENROUTER_MODEL', 'meta-llama/llama-4-maverick:free')
         self.site_url = config.get('YOUR_SITE_URL')
