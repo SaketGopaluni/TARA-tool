@@ -136,7 +136,12 @@ def generate_script():
         data = request.json
         logger.info(f"Received data in generate_script: {data}")
         language = data.get('language')
+        
+        # Accept either 'requirements' or 'prompt' for backward compatibility
         requirements = data.get('requirements')
+        if requirements is None:
+            requirements = data.get('prompt')  # Fallback to 'prompt' if 'requirements' is not provided
+            
         script_name = data.get('script_name', 'Generated Script') # Optional name from frontend
         
         logger.info(f"Parsed parameters - language: {language}, requirements exists: {requirements is not None}, script_name: {script_name}")
@@ -363,8 +368,14 @@ def diffcheck():
         return jsonify({"success": False, "error": str(e), "message": "Failed to generate diff"}), 500
 
 # Testing API - Generate Test Case
-@app.route('/api/testing/generate', methods=['POST'])
+@app.route('/api/testing/generate', methods=['POST', 'GET', 'OPTIONS'])  # Add OPTIONS for preflight and GET for testing
 def generate_test_case():
+    logger.info(f"Accessed /api/testing/generate route with method: {request.method}")
+    if request.method == 'OPTIONS':
+        # Handle preflight requests for CORS if needed
+        resp = app.make_default_options_response()
+        return resp
+        
     if not testing_module:
          return jsonify({"success": False, "error": "Testing module not initialized."}), 500
          
