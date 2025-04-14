@@ -5,12 +5,11 @@ function getCsrfToken() {
     return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 }
 
-// Handle Generate Script form submission with streaming
+// Handle Generate Script form submission
 function handleGenerateScriptFormSubmit(form, promptInput, languageSelect, resultContainer) {
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
         
-        // Get input values
         const prompt = promptInput.value.trim();
         const language = languageSelect.value || 'python';
         
@@ -19,443 +18,244 @@ function handleGenerateScriptFormSubmit(form, promptInput, languageSelect, resul
             return;
         }
         
-        // Show loading state
         const submitButton = form.querySelector('button[type="submit"]');
         submitButton.disabled = true;
         submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Generating...';
         
-        // Prepare the result container for streaming
         resultContainer.classList.remove('hidden');
         const titleElement = resultContainer.querySelector('.script-title');
         const codeElement = resultContainer.querySelector('.script-code');
-        
-        titleElement.textContent = prompt.split('\n')[0].trim() || 'Generated Script';
-        codeElement.textContent = '';
-        codeElement.innerHTML = '<span class="typing-cursor"></span>';
+        const saveButton = resultContainer.querySelector('.btn-save'); 
+        const copyButton = resultContainer.querySelector('.btn-copy');
+
+        titleElement.textContent = 'Generating...';
+        codeElement.textContent = 'Please wait...';
+        hljs.highlightElement(codeElement); 
+        if(saveButton) saveButton.classList.add('hidden');
+        if(copyButton) copyButton.disabled = true;
         
         try {
-            // Send request with streaming enabled
-            const response = await fetch('/api/coding/generate?stream=true', {
+            const response = await fetch('/api/coding/generate', { 
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': getCsrfToken()
+                    'X-CSRFToken': getCsrfToken() 
                 },
                 body: JSON.stringify({ prompt, language })
             });
             
-            if (response.ok) {
-                // Set up the reader for the stream
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let accumulatedContent = '';
-                let initializing = true;
+            const result = await response.json(); 
+
+            if (response.ok && result.success) {
+                const scriptData = result.script; 
                 
-                while (true) {
-                    const { value, done } = await reader.read();
-                    if (done) break;
-                    
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n\n');
-                    
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            try {
-                                const data = JSON.parse(line.slice(6)); // Remove 'data: ' prefix
-                                
-                                if (data.error) {
-                                    showToast(`Error: ${data.error}`, 'error');
-                                    break;
-                                }
-                                
-                                if (data.initializing) {
-                                    console.log('Stream initialized');
-                                    initializing = false;
-                                    continue;
-                                }
-                                
-                                if (data.chunk) {
-                                    // Update the content with the new chunk
-                                    accumulatedContent += data.chunk;
-                                    codeElement.textContent = accumulatedContent;
-                                    codeElement.innerHTML = codeElement.textContent + '<span class="typing-cursor"></span>';
-                                    
-                                    // Highlight the code
-                                    hljs.highlightElement(codeElement);
-                                    
-                                    // Add the cursor back
-                                    codeElement.innerHTML = codeElement.innerHTML + '<span class="typing-cursor"></span>';
-                                }
-                                
-                                if (data.done) {
-                                    // Remove the typing cursor when done
-                                    codeElement.textContent = accumulatedContent;
-                                    hljs.highlightElement(codeElement);
-                                    
-                                    // Enable copy button
-                                    const copyButton = resultContainer.querySelector('.btn-copy');
-                                    if (copyButton) {
-                                        copyButton.disabled = false;
-                                    }
-                                    
-                                    showToast('Script generated successfully', 'success');
-                                    break;
-                                }
-                            } catch (e) {
-                                console.error('Error parsing streaming data:', e);
-                            }
-                        }
-                    }
-                }
+                titleElement.textContent = scriptData.title || prompt.split('\n')[0].trim() || 'Generated Script';
+                codeElement.textContent = scriptData.content; 
+                
+                hljs.highlightElement(codeElement);
+                
+                resultContainer.dataset.scriptId = scriptData.id; 
+                if(saveButton) saveButton.classList.remove('hidden'); 
+                if(copyButton) copyButton.disabled = false; 
+
+                showToast('Script generated successfully!', 'success');
+
             } else {
-                const result = await response.json();
-                showToast(result.message || 'Failed to generate script', 'error');
+                const errorMessage = result.error || 'Failed to generate script. Unknown error.';
+                titleElement.textContent = 'Error';
+                codeElement.textContent = errorMessage;
+                showToast(errorMessage, 'error');
             }
+            
         } catch (error) {
-            showToast(`Error: ${error.message}`, 'error');
+            console.error('Error generating script:', error);
+            titleElement.textContent = 'Error';
+            codeElement.textContent = `An error occurred: ${error.message}`;
+            showToast('An error occurred while generating the script.', 'error');
         } finally {
-            // Reset submit button
             submitButton.disabled = false;
             submitButton.innerHTML = 'Generate Script';
         }
     });
 }
 
-// Handle Debug Script form submission with streaming
-function handleDebugScriptFormSubmit(form, scriptContent, resultContainer) {
+// Handle Debug Script form submission
+function handleDebugScriptFormSubmit(form, scriptContentInput, errorLogInput, resultContainer) { 
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
         
-        // Get input values
-        const script_content = scriptContent.value.trim();
-        const script_id = scriptContent.dataset.scriptId || '';
-        
-        if (!script_content) {
-            showToast('Please enter script content to debug', 'error');
+        const scriptContent = scriptContentInput.value.trim();
+        const errorLog = errorLogInput.value.trim(); 
+        const scriptId = scriptContentInput.dataset.scriptId; 
+
+        if (!scriptContent) {
+            showToast('Please enter the script content to debug', 'error');
             return;
         }
+        if (!errorLog) {
+            showToast('Please enter the error log or description', 'error');
+            return;
+        }
+        if (!scriptId) {
+            console.warn('Script ID not found for debugging. Sending content only.');
+        }
         
-        // Show loading state
         const submitButton = form.querySelector('button[type="submit"]');
         submitButton.disabled = true;
         submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Debugging...';
         
-        // Prepare the result container for streaming
         resultContainer.classList.remove('hidden');
         const explanationElement = resultContainer.querySelector('.debug-explanation');
-        const codeElement = resultContainer.querySelector('.debug-code');
-        const diffElement = resultContainer.querySelector('.debug-diff');
-        
-        explanationElement.textContent = 'Analyzing script...';
-        codeElement.textContent = '';
-        codeElement.innerHTML = '<span class="typing-cursor"></span>';
-        diffElement.innerHTML = '<div class="p-4 bg-gray-100 rounded">Generating diff...</div>';
-        
+        const codeElement = resultContainer.querySelector('.debug-code'); 
+        const saveButton = resultContainer.querySelector('.btn-save-debugged'); 
+        const copyButton = resultContainer.querySelector('.btn-copy');
+
+        explanationElement.textContent = 'Debugging in progress...';
+        codeElement.textContent = 'Please wait...';
+        hljs.highlightElement(codeElement); 
+        if(saveButton) saveButton.classList.add('hidden');
+        if(copyButton) copyButton.disabled = true;
+
         try {
-            // Send request with streaming enabled
-            const response = await fetch('/api/coding/debug?stream=true', {
+            const response = await fetch('/api/coding/debug', { 
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': getCsrfToken()
+                    'X-CSRFToken': getCsrfToken() 
                 },
-                body: JSON.stringify({ script_id, script_content })
+                body: JSON.stringify({ 
+                    script_id: scriptId, 
+                    script_content: scriptContent, 
+                    error_log: errorLog 
+                })
             });
             
-            if (response.ok) {
-                // Set up the reader for the stream
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let accumulatedContent = '';
-                let initializing = true;
+            const result = await response.json(); 
+
+            if (response.ok && result.success) {
+                const debugData = result.debug_result; 
                 
-                while (true) {
-                    const { value, done } = await reader.read();
-                    if (done) break;
-                    
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n\n');
-                    
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            try {
-                                const data = JSON.parse(line.slice(6)); // Remove 'data: ' prefix
-                                
-                                if (data.error) {
-                                    showToast(`Error: ${data.error}`, 'error');
-                                    break;
-                                }
-                                
-                                if (data.initializing) {
-                                    console.log('Stream initialized');
-                                    initializing = false;
-                                    continue;
-                                }
-                                
-                                if (data.chunk) {
-                                    // Update the content with the new chunk
-                                    accumulatedContent += data.chunk;
-                                    
-                                    // Try to extract explanation and code as we go
-                                    const { explanation, code } = extractExplanationAndCode(accumulatedContent);
-                                    
-                                    if (explanation) {
-                                        explanationElement.textContent = explanation;
-                                    }
-                                    
-                                    if (code) {
-                                        codeElement.textContent = code;
-                                        codeElement.innerHTML = codeElement.textContent + '<span class="typing-cursor"></span>';
-                                        hljs.highlightElement(codeElement);
-                                        codeElement.innerHTML = codeElement.innerHTML + '<span class="typing-cursor"></span>';
-                                    }
-                                }
-                                
-                                if (data.done) {
-                                    // Final extraction and formatting
-                                    const { explanation, code } = extractExplanationAndCode(accumulatedContent);
-                                    
-                                    explanationElement.textContent = explanation || 'Debug complete.';
-                                    
-                                    if (code) {
-                                        codeElement.textContent = code;
-                                        hljs.highlightElement(codeElement);
-                                        
-                                        // Generate a simple diff for display
-                                        const diffHtml = generateSimpleDiff(script_content, code);
-                                        diffElement.innerHTML = diffHtml;
-                                    }
-                                    
-                                    // Enable copy button
-                                    const copyButton = resultContainer.querySelector('.btn-copy');
-                                    if (copyButton) {
-                                        copyButton.disabled = false;
-                                    }
-                                    
-                                    showToast('Script debugged successfully', 'success');
-                                    break;
-                                }
-                            } catch (e) {
-                                console.error('Error parsing streaming data:', e);
-                            }
-                        }
-                    }
-                }
+                explanationElement.textContent = debugData.explanation || 'No explanation provided.';
+                codeElement.textContent = debugData.fixed_code;
+                
+                hljs.highlightElement(codeElement);
+                
+                resultContainer.dataset.newVersionId = debugData.id;
+                if(saveButton) saveButton.classList.remove('hidden');
+                if(copyButton) copyButton.disabled = false;
+
+                showToast('Debugging complete!', 'success');
+
             } else {
-                const result = await response.json();
-                showToast(result.message || 'Failed to debug script', 'error');
+                const errorMessage = result.error || 'Failed to debug script. Unknown error.';
+                explanationElement.textContent = 'Error';
+                codeElement.textContent = errorMessage;
+                showToast(errorMessage, 'error');
             }
+            
         } catch (error) {
-            showToast(`Error: ${error.message}`, 'error');
+            console.error('Error debugging script:', error);
+            explanationElement.textContent = 'Error';
+            codeElement.textContent = `An error occurred: ${error.message}`;
+            showToast('An error occurred while debugging the script.', 'error');
         } finally {
-            // Reset submit button
             submitButton.disabled = false;
             submitButton.innerHTML = 'Debug Script';
         }
     });
 }
 
-// Handle Modify Script form submission with streaming
-function handleModifyScriptFormSubmit(form, scriptContent, modificationRequest, resultContainer) {
+// Handle Modify Script form submission
+function handleModifyScriptFormSubmit(form, scriptContentInput, modificationRequestInput, resultContainer) {
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
         
-        // Get input values
-        const script_content = scriptContent.value.trim();
-        const script_id = scriptContent.dataset.scriptId || '';
-        const modification_request = modificationRequest.value.trim();
-        
-        if (!script_content) {
-            showToast('Please enter script content to modify', 'error');
+        const scriptContent = scriptContentInput.value.trim();
+        const modificationRequest = modificationRequestInput.value.trim();
+        const scriptId = scriptContentInput.dataset.scriptId; 
+
+        if (!scriptContent) {
+            showToast('Please enter the script content to modify', 'error');
             return;
         }
-        
-        if (!modification_request) {
-            showToast('Please enter modification request', 'error');
+        if (!modificationRequest) {
+            showToast('Please enter the modification request', 'error');
             return;
         }
+        if (!scriptId) {
+            console.warn('Script ID not found for modification. Sending content only.');
+        }
         
-        // Show loading state
         const submitButton = form.querySelector('button[type="submit"]');
         submitButton.disabled = true;
         submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Modifying...';
         
-        // Prepare the result container for streaming
         resultContainer.classList.remove('hidden');
         const explanationElement = resultContainer.querySelector('.modify-explanation');
-        const codeElement = resultContainer.querySelector('.modify-code');
-        const diffElement = resultContainer.querySelector('.modify-diff');
-        
-        explanationElement.textContent = 'Processing modification request...';
-        codeElement.textContent = '';
-        codeElement.innerHTML = '<span class="typing-cursor"></span>';
-        diffElement.innerHTML = '<div class="p-4 bg-gray-100 rounded">Generating diff...</div>';
-        
+        const codeElement = resultContainer.querySelector('.modify-code'); 
+        const diffElement = resultContainer.querySelector('.modify-diff'); 
+        const saveButton = resultContainer.querySelector('.btn-save-modified'); 
+        const copyButton = resultContainer.querySelector('.btn-copy');
+
+        explanationElement.textContent = 'Modification in progress...';
+        codeElement.textContent = 'Please wait...';
+        diffElement.innerHTML = ''; 
+        hljs.highlightElement(codeElement); 
+        if(saveButton) saveButton.classList.add('hidden');
+        if(copyButton) copyButton.disabled = true;
+
         try {
-            // Send request with streaming enabled
-            const response = await fetch('/api/coding/modify?stream=true', {
+            const response = await fetch('/api/coding/modify', { 
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': getCsrfToken()
+                    'X-CSRFToken': getCsrfToken() 
                 },
-                body: JSON.stringify({ script_id, script_content, modification_request })
+                body: JSON.stringify({ 
+                    script_id: scriptId, 
+                    script_content: scriptContent,
+                    modification_request: modificationRequest 
+                })
             });
             
-            if (response.ok) {
-                // Set up the reader for the stream
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let accumulatedContent = '';
-                let initializing = true;
+            const result = await response.json(); 
+
+            if (response.ok && result.success) {
+                const modifyData = result.modify_result; 
                 
-                while (true) {
-                    const { value, done } = await reader.read();
-                    if (done) break;
-                    
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n\n');
-                    
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            try {
-                                const data = JSON.parse(line.slice(6)); // Remove 'data: ' prefix
-                                
-                                if (data.error) {
-                                    showToast(`Error: ${data.error}`, 'error');
-                                    break;
-                                }
-                                
-                                if (data.initializing) {
-                                    console.log('Stream initialized');
-                                    initializing = false;
-                                    continue;
-                                }
-                                
-                                if (data.chunk) {
-                                    // Update the content with the new chunk
-                                    accumulatedContent += data.chunk;
-                                    
-                                    // Try to extract explanation and code as we go
-                                    const { explanation, code } = extractExplanationAndCode(accumulatedContent);
-                                    
-                                    if (explanation) {
-                                        explanationElement.textContent = explanation;
-                                    }
-                                    
-                                    if (code) {
-                                        codeElement.textContent = code;
-                                        codeElement.innerHTML = codeElement.textContent + '<span class="typing-cursor"></span>';
-                                        hljs.highlightElement(codeElement);
-                                        codeElement.innerHTML = codeElement.innerHTML + '<span class="typing-cursor"></span>';
-                                    }
-                                }
-                                
-                                if (data.done) {
-                                    // Final extraction and formatting
-                                    const { explanation, code } = extractExplanationAndCode(accumulatedContent);
-                                    
-                                    explanationElement.textContent = explanation || 'Modification complete.';
-                                    
-                                    if (code) {
-                                        codeElement.textContent = code;
-                                        hljs.highlightElement(codeElement);
-                                        
-                                        // Generate a simple diff for display
-                                        const diffHtml = generateSimpleDiff(script_content, code);
-                                        diffElement.innerHTML = diffHtml;
-                                    }
-                                    
-                                    // Enable copy button
-                                    const copyButton = resultContainer.querySelector('.btn-copy');
-                                    if (copyButton) {
-                                        copyButton.disabled = false;
-                                    }
-                                    
-                                    showToast('Script modified successfully', 'success');
-                                    break;
-                                }
-                            } catch (e) {
-                                console.error('Error parsing streaming data:', e);
-                            }
-                        }
-                    }
-                }
+                explanationElement.textContent = modifyData.explanation || 'No explanation provided.';
+                codeElement.textContent = modifyData.modified_code;
+                
+                hljs.highlightElement(codeElement);
+
+                const diffHtml = generateSimpleDiff(scriptContent, modifyData.modified_code);
+                diffElement.innerHTML = diffHtml;
+                
+                resultContainer.dataset.newVersionId = modifyData.id;
+                if(saveButton) saveButton.classList.remove('hidden');
+                if(copyButton) copyButton.disabled = false;
+
+                showToast('Modification complete!', 'success');
+
             } else {
-                const result = await response.json();
-                showToast(result.message || 'Failed to modify script', 'error');
+                const errorMessage = result.error || 'Failed to modify script. Unknown error.';
+                explanationElement.textContent = 'Error';
+                codeElement.textContent = errorMessage;
+                diffElement.innerHTML = ''; 
+                showToast(errorMessage, 'error');
             }
+            
         } catch (error) {
-            showToast(`Error: ${error.message}`, 'error');
+            console.error('Error modifying script:', error);
+            explanationElement.textContent = 'Error';
+            codeElement.textContent = `An error occurred: ${error.message}`;
+            diffElement.innerHTML = ''; 
+            showToast('An error occurred while modifying the script.', 'error');
         } finally {
-            // Reset submit button
             submitButton.disabled = false;
             submitButton.innerHTML = 'Modify Script';
         }
     });
-}
-
-// Helper function to extract explanation and code from streamed content
-function extractExplanationAndCode(content) {
-    let explanation = '';
-    let code = '';
-    
-    // Check for markdown code blocks
-    if (content.includes('```')) {
-        const parts = content.split('```');
-        if (parts.length >= 3) {
-            explanation = parts[0].trim();
-            
-            // Remove the language identifier if present
-            let codeBlock = parts[1];
-            if (codeBlock.indexOf('\n') > 0) {
-                codeBlock = codeBlock.substring(codeBlock.indexOf('\n') + 1);
-            }
-            code = codeBlock.trim();
-        }
-    } else {
-        // Try to split on common separators
-        const separators = [
-            '### CODE ###',
-            'Here is the code:',
-            'Here\'s the code:',
-            'Modified code:',
-            'Debugged code:'
-        ];
-        
-        for (const separator of separators) {
-            if (content.includes(separator)) {
-                const parts = content.split(separator);
-                explanation = parts[0].trim();
-                code = parts[1].trim();
-                break;
-            }
-        }
-        
-        // If no clear separator, make a best guess
-        if (!code && content.includes('\n')) {
-            const lines = content.split('\n');
-            let codeStartLine = 0;
-            
-            // Look for code-like lines
-            for (let i = 0; i < lines.length; i++) {
-                if (lines[i].trim().startsWith('def ') || 
-                    lines[i].trim().startsWith('class ') || 
-                    lines[i].trim().startsWith('import ') || 
-                    lines[i].trim().startsWith('from ')) {
-                    codeStartLine = i;
-                    break;
-                }
-            }
-            
-            if (codeStartLine > 0) {
-                explanation = lines.slice(0, codeStartLine).join('\n').trim();
-                code = lines.slice(codeStartLine).join('\n').trim();
-            }
-        }
-    }
-    
-    return { explanation, code };
 }
 
 // Generate a simple diff for display
@@ -465,15 +265,12 @@ function generateSimpleDiff(oldCode, newCode) {
     
     let html = '<div class="diff-container">';
     
-    // Simple line-by-line comparison
     const oldSet = new Set(oldLines);
     const newSet = new Set(newLines);
     
-    // Find removed and added lines
     const removed = oldLines.filter(line => !newSet.has(line));
     const added = newLines.filter(line => !oldSet.has(line));
     
-    // Create HTML diff
     for (const line of oldLines) {
         if (removed.includes(line)) {
             html += `<div class="diff-line-removed">${escapeHtml(line)}</div>`;
@@ -538,7 +335,6 @@ document.head.insertAdjacentHTML('beforeend', `
 
 // Initialize form handlers when the document is loaded
 document.addEventListener('DOMContentLoaded', function() {
-    // Generate Script Form
     const generateScriptForm = document.getElementById('generate-script-form');
     if (generateScriptForm) {
         const promptInput = document.getElementById('script-prompt');
@@ -547,29 +343,22 @@ document.addEventListener('DOMContentLoaded', function() {
         handleGenerateScriptFormSubmit(generateScriptForm, promptInput, languageSelect, resultContainer);
     }
     
-    // Debug Script Form
     const debugScriptForm = document.getElementById('debug-script-form');
     if (debugScriptForm) {
-        const scriptContent = document.getElementById('debug-script-content');
+        const scriptContentInput = document.getElementById('debug-script-content'); 
+        const errorLogInput = document.getElementById('debug-error-log'); 
         const resultContainer = document.getElementById('debug-script-result');
-        handleDebugScriptFormSubmit(debugScriptForm, scriptContent, resultContainer);
+        handleDebugScriptFormSubmit(debugScriptForm, scriptContentInput, errorLogInput, resultContainer);
     }
     
-    // Modify Script Form
     const modifyScriptForm = document.getElementById('modify-script-form');
     if (modifyScriptForm) {
-        const scriptContent = document.getElementById('modify-script-content');
-        const modificationRequest = document.getElementById('modification-request');
+        const scriptContentInput = document.getElementById('modify-script-content'); 
+        const modificationRequestInput = document.getElementById('modification-request'); 
         const resultContainer = document.getElementById('modify-script-result');
-        handleModifyScriptFormSubmit(modifyScriptForm, scriptContent, modificationRequest, resultContainer);
+        handleModifyScriptFormSubmit(modifyScriptForm, scriptContentInput, modificationRequestInput, resultContainer);
     }
     
-    // Initialize copy buttons
-    initializeCopyButtons();
-});
-
-// Initialize copy buttons
-function initializeCopyButtons() {
     document.querySelectorAll('.btn-copy').forEach(button => {
         button.addEventListener('click', function() {
             const codeElement = this.closest('.result-container').querySelector('pre code');
@@ -581,4 +370,4 @@ function initializeCopyButtons() {
             }
         });
     });
-}
+});
