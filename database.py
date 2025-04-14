@@ -8,7 +8,7 @@ class Script(db.Model):
     """Model for storing scripts generated or modified by the application."""
     __tablename__ = 'scripts'
     
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.BigInteger, primary_key=True)
     title = db.Column(db.String(100), nullable=False)
     content = db.Column(db.Text, nullable=False)
     language = db.Column(db.String(50), default='python')
@@ -36,7 +36,7 @@ class ScriptVersion(db.Model):
     __tablename__ = 'script_versions'
     
     id = db.Column(db.Integer, primary_key=True)
-    script_id = db.Column(db.Integer, db.ForeignKey('scripts.id'), nullable=False)
+    script_id = db.Column(db.BigInteger, db.ForeignKey('scripts.id'), nullable=False)
     content = db.Column(db.Text, nullable=False)
     version = db.Column(db.Integer, nullable=False)
     changes = db.Column(db.Text)  # Description of changes
@@ -60,7 +60,7 @@ class TestCase(db.Model):
     __tablename__ = 'test_cases'
     
     id = db.Column(db.Integer, primary_key=True)
-    script_id = db.Column(db.Integer, db.ForeignKey('scripts.id'), nullable=False)
+    script_id = db.Column(db.BigInteger, db.ForeignKey('scripts.id'), nullable=False)
     title = db.Column(db.String(100), nullable=False)
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
