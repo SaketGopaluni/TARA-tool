@@ -59,7 +59,7 @@ class TestingModule:
             logger.error(f"An unexpected error occurred during OpenRouter call in testing module: {e}")
             raise
 
-    def generate_test_cases(self, script_content, language):
+    def generate_test_cases(self, script_content, language, requirements="Generate standard unit tests."):
         """Generates test cases for the given script using OpenRouter."""
         # Determine the testing framework based on language (basic heuristic)
         test_framework = "unittest or pytest" if language.lower() == "python" else "a standard testing framework" 
@@ -69,7 +69,9 @@ class TestingModule:
              test_framework = "Jest or Mocha"
 
         system_prompt = f"You are an expert software tester specializing in writing test cases for {language} code, particularly for automotive and cybersecurity contexts. Generate comprehensive test cases using {test_framework} for the following script. Cover edge cases, common vulnerabilities (if applicable), and standard functionality. Output ONLY the raw test code, without any introduction, explanation, or surrounding text."
-        user_prompt = f"Script ({language}):\n```\n{script_content}\n```\n\nGenerate test cases for this script."
+        
+        # Include the specific requirements in the user prompt
+        user_prompt = f"Script ({language}):\n```\n{script_content}\n```\n\nGenerate test cases for this script with these requirements: {requirements}"
 
         try:
             generated_tests = self._call_openrouter(system_prompt, user_prompt)
