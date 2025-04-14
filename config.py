@@ -7,20 +7,23 @@ load_dotenv()
 # Base configuration class
 class Config:
     # Flask configuration
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'hard-to-guess-string'
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'you-will-never-guess'
     DEBUG = False
     TESTING = False
     
-    # DeepSeek configuration (replacing OpenAI)
-    DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY')
-    DEEPSEEK_MODEL = os.environ.get('DEEPSEEK_MODEL', 'deepseek-chat')
+    # OpenRouter configuration
+    OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY')
+    YOUR_SITE_URL = os.environ.get('YOUR_SITE_URL', '') 
+    YOUR_SITE_NAME = os.environ.get('YOUR_SITE_NAME', 'TARA Assistant')
+    OPENROUTER_MODEL = os.environ.get('OPENROUTER_MODEL', 'meta-llama/llama-4-maverick:free')
     
     # Database configuration
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
+    DATABASE_URL = os.environ.get('DATABASE_URL') or 'sqlite:///tara_assistant.db'
+    SQLALCHEMY_DATABASE_URI = DATABASE_URL 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Application configuration
-    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max upload size
+    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  
 
 # Development configuration
 class DevelopmentConfig(Config):
@@ -46,7 +49,7 @@ class ProductionConfig(Config):
         
         # Check for required environment variables
         assert os.environ.get('SECRET_KEY'), "SECRET_KEY environment variable not set"
-        assert os.environ.get('DEEPSEEK_API_KEY'), "DEEPSEEK_API_KEY environment variable not set"
+        assert os.environ.get('OPENROUTER_API_KEY'), "OPENROUTER_API_KEY environment variable not set"
 
 # Configuration dictionary
 config = {
