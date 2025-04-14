@@ -35,13 +35,16 @@ function handleGenerateScriptFormSubmit(form, promptInput, languageSelect, resul
         if(copyButton) copyButton.disabled = true;
         
         try {
+            const requestData = { requirements: prompt, language };
+            console.log('Sending to /api/coding/generate:', requestData);
+            
             const response = await fetch('/api/coding/generate', { 
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCsrfToken() 
                 },
-                body: JSON.stringify({ requirements: prompt, language })
+                body: JSON.stringify(requestData)
             });
             
             const result = await response.json(); 
