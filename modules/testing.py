@@ -1,252 +1,149 @@
-import os
+import logging
+import subprocess
 import tempfile
-import time
-import unittest
-import io
-import sys
-import contextlib
-import traceback
-from openai import OpenAI
-from database import db, Script, TestCase, TestResult
-from flask import current_app
+import os
+from openai import OpenAI, OpenAIError
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class TestingModule:
-    def __init__(self, api_key=None, model=None, app=None, timeout=5.0):
-        """Initialize the testing module with API credentials."""
-        # Store Flask app reference if provided
-        self.app = app
-        
-        # Get API key and model from app config if available
-        if app:
-            api_key = api_key or app.config.get('DEEPSEEK_API_KEY')
-            model = model or app.config.get('DEEPSEEK_MODEL', 'deepseek-chat')
-        else:
-            api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
-            model = model or os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    """Handles test case generation and execution."""
+
+    def __init__(self, config):
+        """Initialize the TestingModule with application configuration."""
+        if not config.get('OPENROUTER_API_KEY'):
+            raise ValueError("OpenRouter API key not found in configuration.")
             
-        if not api_key:
-            raise ValueError("DEEPSEEK_API_KEY not set in environment or app config")
-            
-        # Initialize the OpenAI client with DeepSeek's base URL and API key
         self.client = OpenAI(
-            api_key=api_key, 
-            base_url="https://api.deepseek.com",
-            timeout=timeout
+            base_url="https://openrouter.ai/api/v1",
+            api_key=config['OPENROUTER_API_KEY'],
         )
-        self.model = model
-    
-    def generate_test_case(self, script_id, script_content, test_requirements):
-        """
-        Generate a test case for a given script based on the requirements.
-        
-        Args:
-            script_id (int): ID of the script to test
-            script_content (str): Content of the script to test
-            test_requirements (str): Description of test requirements
-        
-        Returns:
-            dict: Generated test case or a generator if streaming is enabled
-        """
-        system_message = """You are an expert in writing Python unit tests. Your task is to create
-        comprehensive test cases for the provided code, following best practices for testing.
-        Include setup, assertions, and error handling in your tests."""
-        
+        self.model = config.get('OPENROUTER_MODEL', 'meta-llama/llama-4-maverick:free')
+        self.site_url = config.get('YOUR_SITE_URL')
+        self.site_name = config.get('YOUR_SITE_NAME')
+        self.extra_headers = {}
+        if self.site_url:
+            self.extra_headers["HTTP-Referer"] = self.site_url
+        if self.site_name:
+            self.extra_headers["X-Title"] = self.site_name
+
+    def _call_openrouter(self, system_prompt, user_prompt):
+        """Helper method to make calls to the OpenRouter API."""
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
         try:
-            response = self.client.chat.completions.create(
+            logger.info(f"Calling OpenRouter model: {self.model} for testing module with headers: {self.extra_headers}")
+            completion = self.client.chat.completions.create(
+                extra_headers=self.extra_headers,
                 model=self.model,
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": f"Write unit tests for the following code, according to these requirements: '{test_requirements}'\n\n{script_content}"}
-                ],
-                temperature=0.1,  # Lower temperature for faster, more consistent responses
-                max_tokens=2000,  # Limit token length to avoid timeouts
-                stream=True
+                messages=messages,
+                temperature=0.5, # Slightly lower temperature for tests
+                max_tokens=2048 # Adjust max tokens as needed
             )
-            
-            # Return the streaming response
+            response_content = completion.choices[0].message.content
+            logger.info("OpenRouter call successful for testing module.")
+            return response_content.strip()
+        except OpenAIError as e:
+            logger.error(f"OpenRouter API call failed in testing module: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during OpenRouter call in testing module: {e}")
+            raise
+
+    def generate_test_cases(self, script_content, language):
+        """Generates test cases for the given script using OpenRouter."""
+        # Determine the testing framework based on language (basic heuristic)
+        test_framework = "unittest or pytest" if language.lower() == "python" else "a standard testing framework" 
+        if language.lower() == "c++":
+            test_framework = "Google Test or Catch2"
+        elif language.lower() == "javascript":
+             test_framework = "Jest or Mocha"
+
+        system_prompt = f"You are an expert software tester specializing in writing test cases for {language} code, particularly for automotive and cybersecurity contexts. Generate comprehensive test cases using {test_framework} for the following script. Cover edge cases, common vulnerabilities (if applicable), and standard functionality. Output ONLY the raw test code, without any introduction, explanation, or surrounding text."
+        user_prompt = f"Script ({language}):\n```\n{script_content}\n```\n\nGenerate test cases for this script."
+
+        try:
+            generated_tests = self._call_openrouter(system_prompt, user_prompt)
+            # Post-processing: Ensure it looks like code, remove potential ``` markdown
+            lang_lower = language.lower()
+            if generated_tests.startswith(f"```{lang_lower}"):
+                 generated_tests = generated_tests[len(f"```{lang_lower}\n"):]
+            elif generated_tests.startswith("```"):
+                 generated_tests = generated_tests[3:]
+                 
+            if generated_tests.endswith("\n```"):
+                generated_tests = generated_tests[:-4]
+            elif generated_tests.endswith("```"):
+                 generated_tests = generated_tests[:-3]
+
             return {
                 "success": True,
-                "stream": response,
-                "script_id": script_id,
-                "title": test_requirements.split('\n')[0].strip() if '\n' in test_requirements else test_requirements[:50] + "..."
+                "test_cases": generated_tests
             }
-            
         except Exception as e:
+            logger.error(f"Error generating test cases: {e}")
             return {
                 "success": False,
-                "error": str(e),
-                "message": "Failed to generate test case"
+                "error": f"Failed to generate test cases: {e}"
             }
-    
-    def execute_test(self, test_case_id, test_content, script_content):
+
+    def execute_test(self, script_content, test_content, language):
         """
-        Execute a test case against a script.
-        
-        Args:
-            test_case_id (int): ID of the test case to execute
-            test_content (str): Content of the test case
-            script_content (str): Content of the script to test
-        
-        Returns:
-            dict: Test results
+        Executes the provided test cases against the script.
+        Note: This is a basic implementation and might require adjustments based on the specific language and testing framework.
         """
-        try:
-            # Create temporary directory
-            with tempfile.TemporaryDirectory() as temp_dir:
-                # Create the script module file
-                script_module_name = "script_module.py"
-                script_module_path = os.path.join(temp_dir, script_module_name)
-                
-                with open(script_module_path, 'w') as f:
-                    f.write(script_content)
-                
-                # Create the test file
-                test_file_name = "test_script.py"
-                test_file_path = os.path.join(temp_dir, test_file_name)
-                
-                # Modify imports to use the local module
-                test_content = test_content.replace("import unittest", "import unittest, sys\nsys.path.append('.')")
-                
-                # Replace any imports of the original module
-                module_name = "script_module"
-                if "import " in script_content:
-                    for line in script_content.split('\n'):
-                        if line.startswith("class "):
-                            class_name = line.split('class ')[1].split('(')[0].strip()
-                            test_content = test_content.replace(f"from {class_name}", f"from {module_name}")
-                            test_content = test_content.replace(f"import {class_name}", f"from {module_name} import {class_name}")
-                
-                with open(test_file_path, 'w') as f:
-                    f.write(test_content)
-                
-                # Execute the test
-                start_time = time.time()
-                
-                # Capture stdout and stderr
-                stdout_buffer = io.StringIO()
-                stderr_buffer = io.StringIO()
-                
-                with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
+        logger.info(f"Attempting to execute tests for language: {language}")
+        results = "Execution environment not set up for this language or framework."
+        success = False
+
+        # Basic execution for Python using unittest/pytest (requires file saving)
+        if language.lower() == "python":
+            try:
+                with tempfile.TemporaryDirectory() as tempdir:
+                    script_path = os.path.join(tempdir, "script_to_test.py")
+                    test_path = os.path.join(tempdir, "test_script.py")
+
+                    with open(script_path, 'w') as f:
+                        f.write(script_content)
+                    with open(test_path, 'w') as f:
+                        f.write(test_content)
+
+                    # Try running with pytest first, then unittest
                     try:
-                        # Change to the temporary directory
-                        original_dir = os.getcwd()
-                        os.chdir(temp_dir)
-                        
-                        # Create a TestLoader and a TestRunner
-                        loader = unittest.TestLoader()
-                        runner = unittest.TextTestRunner(stream=stdout_buffer, verbosity=2)
-                        
-                        # Load and run the tests
-                        tests = loader.discover('.', pattern=test_file_name)
-                        result = runner.run(tests)
-                        
-                        # Change back to the original directory
-                        os.chdir(original_dir)
-                        
-                        status = "passed" if result.wasSuccessful() else "failed"
-                    except Exception as e:
-                        status = "error"
-                        traceback.print_exc(file=stderr_buffer)
-                
-                end_time = time.time()
-                execution_time = end_time - start_time
-                
-                # Combine stdout and stderr
-                output = stdout_buffer.getvalue() + "\n" + stderr_buffer.getvalue()
-                
-                # Save the test result
-                test_result = TestResult(
-                    test_case_id=test_case_id,
-                    status=status,
-                    output=output,
-                    execution_time=execution_time
-                )
-                db.session.add(test_result)
-                db.session.commit()
-                
-                return {
-                    "success": True,
-                    "test_result": test_result.to_dict(),
-                    "message": f"Test executed with status: {status}"
-                }
-                
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "message": "Failed to execute test"
-            }
-    
-    def improve_test_case(self, test_case_id, test_content, script_content, test_result_output):
-        """
-        Improve a test case based on previous execution results.
-        
-        Args:
-            test_case_id (int): ID of the test case to improve
-            test_content (str): Current content of the test case
-            script_content (str): Content of the script being tested
-            test_result_output (str): Output from the previous test execution
-        
-        Returns:
-            dict: Improved test case or a generator if streaming is enabled
-        """
-        system_message = """You are an expert in improving Python unit tests. Your task is to analyze
-        the provided test case, the script it's testing, and the execution results, and then make
-        improvements to fix any issues or enhance test coverage."""
-        
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": f"""Improve the following test case:
-                    
-                    SCRIPT:
-                    ```python
-                    {script_content}
-                    ```
-                    
-                    TEST CASE:
-                    ```python
-                    {test_content}
-                    ```
-                    
-                    EXECUTION RESULTS:
-                    ```
-                    {test_result_output}
-                    ```
-                    
-                    Please provide an improved version of the test case that addresses any issues."""}
-                ],
-                temperature=0.1,  # Lower temperature for faster, more consistent responses
-                max_tokens=2000,  # Limit token length to avoid timeouts
-                stream=True
-            )
-            
-            # Return the streaming response
-            return {
-                "success": True,
-                "stream": response,
-                "test_case_id": test_case_id
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "message": "Failed to improve test case"
-            }
-    
-    def _extract_code_from_markdown(self, markdown_content):
-        """Extract code from markdown code blocks."""
-        lines = markdown_content.split('\n')
-        
-        # If first line contains the language identifier (```python)
-        if lines[0].startswith("```"):
-            lines = lines[1:]
-        
-        # If last line is just the closing tag
-        if lines[-1] == "```":
-            lines = lines[:-1]
-        
-        return '\n'.join(lines)
+                        # Ensure pytest runs from the tempdir
+                        process = subprocess.run(['pytest', test_path], capture_output=True, text=True, check=True, timeout=30, cwd=tempdir)
+                        results = process.stdout + "\n" + process.stderr
+                        success = process.returncode == 0
+                        logger.info(f"Pytest execution successful (return code {process.returncode}).")
+                    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as pytest_err:
+                        logger.warning(f"Pytest execution failed ({pytest_err}), trying unittest.")
+                        try:
+                            # Ensure unittest runs from the tempdir and discovers tests in the file
+                            process = subprocess.run(['python', '-m', 'unittest', test_path], capture_output=True, text=True, check=True, timeout=30, cwd=tempdir)
+                            results = process.stdout + "\n" + process.stderr
+                            success = process.returncode == 0
+                            logger.info(f"Unittest execution successful (return code {process.returncode}).")
+                        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as unittest_err:
+                            logger.error(f"Both pytest and unittest execution failed. Pytest error: {pytest_err}, Unittest error: {unittest_err}")
+                            results = f"Pytest failed: {pytest_err.stderr if hasattr(pytest_err, 'stderr') else pytest_err}\n\nUnittest failed: {unittest_err.stderr if hasattr(unittest_err, 'stderr') else unittest_err}"
+                            success = False
+                            
+            except Exception as e:
+                logger.error(f"Error setting up or running Python tests: {e}")
+                results = f"Error during test execution setup: {e}"
+                success = False
+        else:
+            logger.warning(f"Test execution not implemented for language: {language}")
+            # Placeholder for other languages (C++, JavaScript, etc.)
+            # This would require specific compilers/interpreters and test runners
+            # For C++: Compile script and tests, link, run executable
+            # For JS: Use Node.js with Jest/Mocha runner
+
+        return {
+            "success": success,
+            "results": results
+        }
