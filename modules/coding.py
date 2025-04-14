@@ -3,6 +3,7 @@ from openai import OpenAI, OpenAIError
 import httpx
 from diff_match_patch import diff_match_patch
 
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -37,8 +38,14 @@ class CodingModule:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ]
+        
+        # Log the prompts and payload before sending
+        logger.info(f"_call_openrouter - System Prompt: {system_prompt}")
+        logger.info(f"_call_openrouter - User Prompt: {user_prompt}")
+        logger.info(f"_call_openrouter - Sending messages payload: {messages}") 
+        logger.info(f"Calling OpenRouter model: {self.model} for coding with headers: {self.extra_headers}")
+        
         try:
-            logger.info(f"Calling OpenRouter model: {self.model} with headers: {self.extra_headers}")
             completion = self.client.chat.completions.create(
                 extra_headers=self.extra_headers,
                 model=self.model,
