@@ -198,6 +198,7 @@ def debug_script():
         data = request.json
         script_id = data.get('script_id')
         script_content = data.get('script_content') # Get current content from request
+        error_log = data.get('error_log', '') # Get error log from request
 
         if not script_id or script_content is None:
             return jsonify({"success": False, "error": "Missing script_id or script_content"}), 400
@@ -208,7 +209,7 @@ def debug_script():
 
         logger.debug(f"Calling coding_module.debug_script for script ID: {script_id}")
         # Call refactored debug method (returns dict with 'analysis' and 'fixed_code')
-        debug_result = coding_module.debug_script(script_content)
+        debug_result = coding_module.debug_script(script_content, error_log)
 
         analysis = debug_result.get('analysis', 'No analysis provided.')
         fixed_code = debug_result.get('fixed_code') # Will be None if no fix or error
