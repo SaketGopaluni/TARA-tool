@@ -1,5 +1,6 @@
 import os
 import tempfile
+# import uuid # No longer needed directly here
 import json
 import re
 import logging # Add logging import
@@ -60,18 +61,30 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 # These instances will handle the AI interactions
 try:
     # Pass the whole config dictionary (or app.config directly)
+    logger.debug(f"Attempting to initialize modules with config: {app.config}") # Log the config object
+    logger.info(f"Found OPENROUTER_API_KEY in app.config: {'*' * 5 + app.config.get('OPENROUTER_API_KEY')[-4:] if app.config.get('OPENROUTER_API_KEY') else 'Not Found'}") # Log if key exists (partially masked)
+    
+    logger.info("Initializing CodingModule...")
     coding_module = CodingModule(app.config)
+    logger.info("CodingModule initialized successfully.")
+    
+    logger.info("Initializing TestingModule...")
     testing_module = TestingModule(app.config)
+    logger.info("TestingModule initialized successfully.")
+    
+    logger.info("Initializing ChatModule...")
     chat_module = ChatModule(app.config)
+    logger.info("ChatModule initialized successfully.")
+    
 except ValueError as e:
-    logger.error(f"Error initializing modules: {e}. Ensure OPENROUTER_API_KEY is set.")
+    logger.error(f"ValueError during module initialization: {e}. Ensure OPENROUTER_API_KEY is set.", exc_info=True) # Log full traceback
     # Depending on the app's requirements, you might exit or run in a limited mode.
     # For now, we'll log the error and let Flask continue, but API calls will fail.
     coding_module = None
     testing_module = None
     chat_module = None
 except Exception as e:
-    logger.error(f"Unexpected error initializing modules: {e}", exc_info=True)
+    logger.error(f"Unexpected Exception during module initialization: {e}", exc_info=True) # Log full traceback
     coding_module = None
     testing_module = None
     chat_module = None
