@@ -7,6 +7,7 @@ python-dotenv==1.0.0
 requests==2.31.0 # For making HTTP requests to OpenRouter API
 diff-match-patch==20230430 # For generating code differences
 openai==1.3.7 # Required for interacting with OpenRouter via OpenAI client interface
+httpx>=0.23.0 # Required by OpenAI client and used directly for proxy fix
 gunicorn==21.2.0 # WSGI server for deployment
 psycopg2-binary==2.9.9 # PostgreSQL adapter (if used in production)
 Werkzeug==2.3.7 # Core Flask dependency
