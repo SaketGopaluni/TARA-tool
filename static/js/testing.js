@@ -74,18 +74,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
             try {
                 // Send request to API (non-streaming)
-                const response = await fetch('/api/testing/generate', { // Removed ?stream=true
+                const apiUrl = '/api/testing/generate';
+                const requestData = { 
+                    script_id: script_id, 
+                    requirements: requirements
+                };
+                
+                console.log(`Sending to ${apiUrl}:`, requestData);
+                
+                const response = await fetch(apiUrl, { // Removed ?stream=true
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-CSRFToken': getCsrfToken() // Assuming CSRF is needed
                     },
-                    body: JSON.stringify({ 
-                        script_id: script_id, 
-                        requirements: requirements // Send requirements
-                        // script_content: script_content, // Removed
-                        // test_requirements: test_requirements // Renamed and value taken from requirements
-                    })
+                    body: JSON.stringify(requestData)
+                });
+                
+                console.log(`Response from ${apiUrl}:`, {
+                    status: response.status,
+                    statusText: response.statusText
                 });
                 
                 const result = await response.json(); // Get full JSON response
