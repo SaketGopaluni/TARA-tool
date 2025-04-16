@@ -73,6 +73,18 @@ function handleGenerateScriptFormSubmit(form, promptInput, languageSelect, resul
                     modifyScriptContentInput.value = scriptData.content;
                     modifyScriptContentInput.dataset.scriptId = scriptData.id;
                 }
+                console.log(`[Generate Success] Set dataset.scriptId = ${scriptData.id} on debug input:`, debugScriptContentInput.dataset);
+                console.log(`[Generate Success] Set dataset.scriptId = ${scriptData.id} on modify input:`, modifyScriptContentInput.dataset);
+
+                // Also update the hidden input in the forms if they exist
+                const debugHiddenId = document.getElementById('debug-script-id');
+                if (debugHiddenId) {
+                    debugHiddenId.value = scriptData.id;
+                }
+                const modifyHiddenId = document.getElementById('modify-script-id');
+                if (modifyHiddenId) {
+                    modifyHiddenId.value = scriptData.id;
+                }
                 // --- End Population ---
 
                 showToast('Script generated successfully!', 'success');
@@ -125,6 +137,7 @@ function handleDebugScriptFormSubmit(form, scriptContentInput, errorLogInput, re
 
         const scriptContent = scriptContentInput.value.trim();            
         const errorLog = errorLogInput.value.trim();                      
+        console.log('Debug content input dataset just before reading scriptId:', scriptContentInput.dataset);
         const scriptId = scriptContentInput.dataset.scriptId;             
         console.log('Retrieved scriptId from dataset:', scriptId);        
 
