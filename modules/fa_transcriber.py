@@ -24,7 +24,10 @@ class FATranscriberModule:
             api_key=config['OPENROUTER_API_KEY'],
             http_client=httpx_client
         )
-        self.model = config.get('OPENROUTER_MODEL', 'meta-llama/llama-4-maverick:free')
+        # Store the configured model but use a known vision-capable model by default
+        self.configured_model = config.get('OPENROUTER_MODEL', 'meta-llama/llama-4-maverick:free')
+        # Use a default model that is known to support vision
+        self.vision_model = "google/gemini-2.0-flash-thinking-exp:free"
         self.site_url = config.get('YOUR_SITE_URL')
         self.site_name = config.get('YOUR_SITE_NAME')
         self.extra_headers = {}
@@ -84,7 +87,7 @@ Format your response as a clean JSON array with each object having the 7 fields 
 Do not include any text outside the JSON array. Use the exact column names shown above as keys.
 """
             
-            # User message with the image - FIXED FORMAT with url object
+            # User message with the image
             user_message = {
                 "role": "user",
                 "content": [
@@ -107,45 +110,51 @@ Do not include any text outside the JSON array. Use the exact column names shown
                 user_message
             ]
             
-            logger.info(f"Calling OpenRouter model: {self.model} for FA transcription")
-            
+            # Try first with the known vision-capable model
             try:
-                # Call the OpenRouter API with the image
+                logger.info(f"Calling OpenRouter with vision-capable model: {self.vision_model}")
                 completion = self.client.chat.completions.create(
-                    extra_headers=self.extra_headers,
-                    model=self.model,
+                    model=self.vision_model,
                     messages=messages,
-                    temperature=0.3,  # Lower temperature for more deterministic results
-                    max_tokens=2500   # Adjust based on expected output size
+                    temperature=0.3,
+                    max_tokens=2500,
+                    headers=self.extra_headers
                 )
-                
-                # Log Response Info - with safe checks
-                logger.info(f"API Response received. Status: Success")
-                
-                # Safely check if completion has choices
-                has_choices = hasattr(completion, 'choices') and completion.choices is not None
-                choices_count = len(completion.choices) if has_choices else 0
-                logger.info(f"Response has {choices_count} choices")
-                
-            except Exception as api_err:
-                logger.error(f"Error during API call: {api_err}")
-                import traceback
-                logger.error(traceback.format_exc())
+                logger.info(f"API Response received using {self.vision_model}.")
+            except Exception as vision_model_err:
+                logger.warning(f"Error with vision model: {str(vision_model_err)}. Trying configured model.")
+                # Fall back to the configured model
+                try:
+                    logger.info(f"Falling back to configured model: {self.configured_model}")
+                    completion = self.client.chat.completions.create(
+                        model=self.configured_model,
+                        messages=messages,
+                        temperature=0.3,
+                        max_tokens=2500,
+                        headers=self.extra_headers
+                    )
+                    logger.info(f"API Response received using {self.configured_model}.")
+                except Exception as configured_model_err:
+                    logger.error(f"Error with configured model: {str(configured_model_err)}")
+                    return {
+                        "success": False,
+                        "error": f"API call error with both models: {str(configured_model_err)}"
+                    }
+            
+            # Safely check if completion has choices
+            if not hasattr(completion, 'choices') or completion.choices is None:
+                logger.error("API returned response but 'choices' attribute is missing or None")
+                # Convert completion to string for debugging
+                logger.error(f"Raw API response: {str(completion)}")
                 return {
                     "success": False,
-                    "error": f"API call error: {str(api_err)}"
+                    "error": "API returned invalid response structure - 'choices' attribute missing"
                 }
             
-            # Extract and process the response - with safe attribute access
-            if not hasattr(completion, 'choices') or not completion.choices:
-                logger.error("API returned empty or invalid response - no choices available")
-                return {
-                    "success": False,
-                    "error": "API returned empty or invalid response - no choices available"
-                }
-                
-            # Access the first choice safely
-            if len(completion.choices) == 0:
+            choices_count = len(completion.choices)
+            logger.info(f"Response has {choices_count} choices")
+            
+            if choices_count == 0:
                 logger.error("API returned empty choices array")
                 return {
                     "success": False,
@@ -188,6 +197,16 @@ Do not include any text outside the JSON array. Use the exact column names shown
             
             # Strip whitespace
             response_content = response_content.strip()
+            
+            # If the response doesn't look like JSON, try to extract it
+            if not (response_content.startswith('[') or response_content.startswith('{')):
+                import re
+                json_pattern = r'\[\s*\{.*?\}\s*\]'
+                json_match = re.search(json_pattern, response_content, re.DOTALL)
+                
+                if json_match:
+                    response_content = json_match.group(0)
+                    logger.info(f"Extracted JSON pattern from non-JSON response: {response_content[:100]}...")
             
             try:
                 # Try to parse as JSON
@@ -240,43 +259,6 @@ Do not include any text outside the JSON array. Use the exact column names shown
                 logger.error(f"Failed to parse AI response as JSON: {json_err}")
                 logger.error(f"Raw response content: {response_content[:200]}...")
                 
-                # Try to extract anything that looks like JSON
-                import re
-                json_pattern = r'\[\s*\{.*?\}\s*\]'
-                json_match = re.search(json_pattern, response_content, re.DOTALL)
-                
-                if json_match:
-                    try:
-                        extracted_json = json_match.group(0)
-                        logger.info(f"Found possible JSON pattern: {extracted_json[:100]}...")
-                        result = json.loads(extracted_json)
-                        logger.info(f"Successfully parsed extracted JSON. Found {len(result)} items")
-                        
-                        # Standardize as before
-                        standardized_result = []
-                        for item in result:
-                            if not isinstance(item, dict):
-                                continue
-                                
-                            standardized_item = {
-                                "sheet_name": item.get("Sheet Name", ""),
-                                "message": item.get("Message", ""),
-                                "start_ecu": item.get("Start ECU", ""),
-                                "end_ecu": item.get("End ECU", ""),
-                                "sending_ecu": item.get("Sending ECU", ""),
-                                "receiving_ecu": item.get("Receiving ECU", ""),
-                                "dashed_line": item.get("Dashed Line", "")
-                            }
-                            standardized_result.append(standardized_item)
-                        
-                        logger.info(f"Processed {len(standardized_result)} items from the extracted JSON")
-                        return {
-                            "success": True,
-                            "data": standardized_result
-                        }
-                    except Exception as extract_err:
-                        logger.error(f"Error while processing extracted JSON: {extract_err}")
-                        
                 # If all extraction attempts fail, return empty data
                 return {
                     "success": True,
