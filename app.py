@@ -1,6 +1,6 @@
 import os
 import tempfile
-# import uuid # No longer needed directly here
+import uuid # Add the missing import
 import json
 import re
 import logging # Add logging import
