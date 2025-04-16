@@ -36,12 +36,18 @@ class FATranscriberModule:
     def transcribe_image(self, image_data, filename=None, content_type=None):
         """Transcribes a FA diagram image using OpenRouter AI vision capabilities."""
         try:
+            # Set default content type if not provided
+            if not content_type:
+                content_type = "image/jpeg"
+                
             # Prepare base64 encoded image
             if isinstance(image_data, bytes):
                 encoded_image = base64.b64encode(image_data).decode('utf-8')
             else:
                 # Assume already base64 encoded
                 encoded_image = image_data
+            
+            logger.info(f"Processing image with content type: {content_type}")
             
             # Create the system prompt to instruct the AI
             system_prompt = """
@@ -76,9 +82,9 @@ You are an expert in functional architecture (FA) diagrams analysis for automoti
 
 Format your response as a clean JSON array with each object having the 7 fields mentioned above.
 Do not include any text outside the JSON array. Use the exact column names shown above as keys.
-            """
+"""
             
-            # User message with the image
+            # User message with the image - FIXED FORMAT with url object
             user_message = {
                 "role": "user",
                 "content": [
@@ -88,7 +94,9 @@ Do not include any text outside the JSON array. Use the exact column names shown
                     },
                     {
                         "type": "image_url",
-                        "image_url": f"data:{content_type};base64,{encoded_image}"
+                        "image_url": {
+                            "url": f"data:{content_type};base64,{encoded_image}"
+                        }
                     }
                 ]
             }
@@ -100,6 +108,7 @@ Do not include any text outside the JSON array. Use the exact column names shown
             ]
             
             logger.info(f"Calling OpenRouter model: {self.model} for FA transcription")
+            
             # Call the OpenRouter API with the image
             completion = self.client.chat.completions.create(
                 extra_headers=self.extra_headers,
@@ -108,6 +117,10 @@ Do not include any text outside the JSON array. Use the exact column names shown
                 temperature=0.3,  # Lower temperature for more deterministic results
                 max_tokens=2500   # Adjust based on expected output size
             )
+            
+            # Add detailed logging of the API response for debugging
+            logger.info(f"API Response received. Status: Success")
+            logger.info(f"Response has {len(completion.choices) if hasattr(completion, 'choices') else 0} choices")
             
             # Extract and process the response
             # Check if completion and its attributes exist before accessing
@@ -122,6 +135,7 @@ Do not include any text outside the JSON array. Use the exact column names shown
             first_choice = completion.choices[0] if completion.choices else None
             if not first_choice or not hasattr(first_choice, 'message') or not first_choice.message:
                 logger.error("API response missing message content")
+                logger.error(f"Response structure: {str(completion)[:200]}...")
                 return {
                     "success": False,
                     "error": "API response missing message content"
@@ -139,6 +153,8 @@ Do not include any text outside the JSON array. Use the exact column names shown
                 }
                 
             logger.info("OpenRouter FA transcription call successful.")
+            logger.info(f"Response content length: {len(response_content)} characters")
+            logger.info(f"Response content preview: {response_content[:100]}...")
             
             # Clean up the response to ensure it's valid JSON
             # Remove any markdown code blocks if present
@@ -157,6 +173,7 @@ Do not include any text outside the JSON array. Use the exact column names shown
             try:
                 # Try to parse as JSON
                 result = json.loads(response_content)
+                logger.info(f"Successfully parsed response as JSON. Type: {type(result).__name__}")
                 
                 # Make sure we got a list/array
                 if not isinstance(result, list):
@@ -164,15 +181,18 @@ Do not include any text outside the JSON array. Use the exact column names shown
                     # If it's a dict with results inside, try to extract them
                     if isinstance(result, dict) and ('results' in result or 'data' in result):
                         result = result.get('results') or result.get('data') or []
+                        logger.info(f"Extracted data from dictionary, now have {len(result)} items")
                     else:
                         # Wrap single item in a list
                         result = [result] if result else []
+                        logger.info(f"Wrapped single item in a list, now have {len(result)} items")
                 
                 # Standardize the key names to match our database model
                 standardized_result = []
                 for item in result:
                     # Skip if not a dict
                     if not isinstance(item, dict):
+                        logger.warning(f"Skipping non-dictionary item in result: {str(item)[:50]}...")
                         continue
                         
                     standardized_item = {
@@ -186,6 +206,8 @@ Do not include any text outside the JSON array. Use the exact column names shown
                     }
                     standardized_result.append(standardized_item)
                 
+                logger.info(f"Processed {len(standardized_result)} items from the transcription")
+                
                 # If we didn't get any valid items, return an empty list rather than failing
                 if not standardized_result:
                     logger.warning("No valid items found in API response")
@@ -197,6 +219,8 @@ Do not include any text outside the JSON array. Use the exact column names shown
                 }
             except json.JSONDecodeError as json_err:
                 logger.error(f"Failed to parse AI response as JSON: {json_err}")
+                logger.error(f"Raw response content: {response_content[:200]}...")
+                
                 # Try to extract anything that looks like JSON
                 import re
                 json_pattern = r'\[\s*\{.*?\}\s*\]'
@@ -205,7 +229,9 @@ Do not include any text outside the JSON array. Use the exact column names shown
                 if json_match:
                     try:
                         extracted_json = json_match.group(0)
+                        logger.info(f"Found possible JSON pattern: {extracted_json[:100]}...")
                         result = json.loads(extracted_json)
+                        logger.info(f"Successfully parsed extracted JSON. Found {len(result)} items")
                         
                         # Standardize as before
                         standardized_result = []
@@ -224,12 +250,13 @@ Do not include any text outside the JSON array. Use the exact column names shown
                             }
                             standardized_result.append(standardized_item)
                         
+                        logger.info(f"Processed {len(standardized_result)} items from the extracted JSON")
                         return {
                             "success": True,
                             "data": standardized_result
                         }
-                    except:
-                        pass
+                    except Exception as extract_err:
+                        logger.error(f"Error while processing extracted JSON: {extract_err}")
                         
                 # If all extraction attempts fail, return empty data
                 return {
@@ -246,6 +273,8 @@ Do not include any text outside the JSON array. Use the exact column names shown
             }
         except Exception as e:
             logger.error(f"An unexpected error occurred during OpenRouter call: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return {
                 "success": False, 
                 "error": f"An unexpected error occurred: {e}"
