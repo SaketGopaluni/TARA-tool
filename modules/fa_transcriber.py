@@ -109,33 +109,52 @@ Do not include any text outside the JSON array. Use the exact column names shown
             
             logger.info(f"Calling OpenRouter model: {self.model} for FA transcription")
             
-            # Call the OpenRouter API with the image
-            completion = self.client.chat.completions.create(
-                extra_headers=self.extra_headers,
-                model=self.model,
-                messages=messages,
-                temperature=0.3,  # Lower temperature for more deterministic results
-                max_tokens=2500   # Adjust based on expected output size
-            )
-            
-            # Add detailed logging of the API response for debugging
-            logger.info(f"API Response received. Status: Success")
-            logger.info(f"Response has {len(completion.choices) if hasattr(completion, 'choices') else 0} choices")
-            
-            # Extract and process the response
-            # Check if completion and its attributes exist before accessing
-            if not completion or not hasattr(completion, 'choices') or not completion.choices:
-                logger.error("API returned empty or invalid response")
+            try:
+                # Call the OpenRouter API with the image
+                completion = self.client.chat.completions.create(
+                    extra_headers=self.extra_headers,
+                    model=self.model,
+                    messages=messages,
+                    temperature=0.3,  # Lower temperature for more deterministic results
+                    max_tokens=2500   # Adjust based on expected output size
+                )
+                
+                # Log Response Info - with safe checks
+                logger.info(f"API Response received. Status: Success")
+                
+                # Safely check if completion has choices
+                has_choices = hasattr(completion, 'choices') and completion.choices is not None
+                choices_count = len(completion.choices) if has_choices else 0
+                logger.info(f"Response has {choices_count} choices")
+                
+            except Exception as api_err:
+                logger.error(f"Error during API call: {api_err}")
+                import traceback
+                logger.error(traceback.format_exc())
                 return {
                     "success": False,
-                    "error": "API returned empty or invalid response"
+                    "error": f"API call error: {str(api_err)}"
+                }
+            
+            # Extract and process the response - with safe attribute access
+            if not hasattr(completion, 'choices') or not completion.choices:
+                logger.error("API returned empty or invalid response - no choices available")
+                return {
+                    "success": False,
+                    "error": "API returned empty or invalid response - no choices available"
                 }
                 
             # Access the first choice safely
-            first_choice = completion.choices[0] if completion.choices else None
-            if not first_choice or not hasattr(first_choice, 'message') or not first_choice.message:
+            if len(completion.choices) == 0:
+                logger.error("API returned empty choices array")
+                return {
+                    "success": False,
+                    "error": "API returned empty choices array"
+                }
+                
+            first_choice = completion.choices[0]
+            if not hasattr(first_choice, 'message') or first_choice.message is None:
                 logger.error("API response missing message content")
-                logger.error(f"Response structure: {str(completion)[:200]}...")
                 return {
                     "success": False,
                     "error": "API response missing message content"
@@ -143,15 +162,15 @@ Do not include any text outside the JSON array. Use the exact column names shown
                 
             # Get the content safely
             message = first_choice.message
-            response_content = message.content if hasattr(message, 'content') else None
-            
-            if not response_content:
+            if not hasattr(message, 'content') or message.content is None:
                 logger.error("API response has empty content")
                 return {
                     "success": False,
                     "error": "API response has empty content"
                 }
                 
+            response_content = message.content
+            
             logger.info("OpenRouter FA transcription call successful.")
             logger.info(f"Response content length: {len(response_content)} characters")
             logger.info(f"Response content preview: {response_content[:100]}...")
