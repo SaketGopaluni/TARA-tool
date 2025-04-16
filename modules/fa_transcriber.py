@@ -118,7 +118,7 @@ Do not include any text outside the JSON array. Use the exact column names shown
                     messages=messages,
                     temperature=0.3,
                     max_tokens=2500,
-                    headers=self.extra_headers
+                    extra_headers=self.extra_headers  # FIXED: Use extra_headers instead of headers
                 )
                 logger.info(f"API Response received using {self.vision_model}.")
             except Exception as vision_model_err:
@@ -131,7 +131,7 @@ Do not include any text outside the JSON array. Use the exact column names shown
                         messages=messages,
                         temperature=0.3,
                         max_tokens=2500,
-                        headers=self.extra_headers
+                        extra_headers=self.extra_headers  # FIXED: Use extra_headers instead of headers
                     )
                     logger.info(f"API Response received using {self.configured_model}.")
                 except Exception as configured_model_err:
