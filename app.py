@@ -193,24 +193,28 @@ def generate_script():
 def debug_script():
     logger.info("Entering debug_script route...")
     if not coding_module:
-        return jsonify({"success": False, "error": "Coding module not initialized."}), 500
-
+        return jsonify({"success": False, "error": "Coding module not initialized. Check API key.", "message": "Internal server error"}), 500
+        
     try:
         data = request.json
-        logger.info(f"Received data in debug_script: {data}") # <<< ADD LOGGING HERE
+        logger.info(f"Received data in debug_script: {data}") 
         
         script_id = data.get('script_id')
         script_content = data.get('script_content') # Get current content from request
         error_log = data.get('error_log', '') # Get error log from request
 
-        if not script_id or script_content is None:
-            return jsonify({"success": False, "error": "Missing script_id or script_content"}), 400
+        if script_content is None:
+            return jsonify({"success": False, "error": "Missing script_content"}), 400
 
-        script = Script.query.get(script_id)
-        if not script:
-            return jsonify({"success": False, "error": "Script not found"}), 404
+        # If script_id is missing but we have content, we can still proceed with debugging
+        script = None
+        if script_id:
+            script = Script.query.get(script_id)
+            logger.info(f"Found script in database with ID: {script_id}")
+        else:
+            logger.warning("No script_id provided, proceeding with content-only debugging")
 
-        logger.debug(f"Calling coding_module.debug_script for script ID: {script_id}")
+        logger.debug(f"Calling coding_module.debug_script for script")
         # Call refactored debug method (returns dict with 'analysis' and 'fixed_code')
         debug_result = coding_module.debug_script(script_content, error_log)
 
@@ -224,7 +228,7 @@ def debug_script():
                 return jsonify({"success": False, "error": analysis}), 500
             else:
                 # No changes needed or analysis only
-                logger.info(f"Debug analysis complete for script {script_id}, no code changes suggested.")
+                logger.info(f"Debug analysis complete, no code changes suggested.")
                 return jsonify({
                     "success": True,
                     "analysis": analysis,
@@ -235,7 +239,7 @@ def debug_script():
 
         # --- Database Interaction (Code Changed) --- 
         version_dict = None
-        if fixed_code != script_content:
+        if script and fixed_code != script_content:
             logger.debug(f"Saving debugged version for script ID: {script_id}")
             latest_version = ScriptVersion.query.filter_by(script_id=script.id).order_by(ScriptVersion.version.desc()).first()
             new_version_num = (latest_version.version + 1) if latest_version else 1
@@ -256,13 +260,16 @@ def debug_script():
             logger.info(f"Created debugged ScriptVersion ID: {new_version.id} for Script ID: {script.id}")
             version_dict = new_version.to_dict()
         else:
-            logger.info(f"Debug analysis complete for script {script_id}, code was identical.")
+            if script:
+                logger.info(f"Debug analysis complete for script {script_id}, code was identical.")
+            else:
+                logger.info("Debug completed without script ID, no version saved to database")
             
         return jsonify({
             "success": True,
             "analysis": analysis,
             "fixed_code": fixed_code,
-            "script_id": script_id,
+            "script_id": script_id if script else None,
             "new_version": version_dict # Include new version info if created
         })
 
@@ -281,20 +288,25 @@ def modify_script():
 
     try:
         data = request.json
-        logger.info(f"Received data in modify_script: {data}") # <<< ADD LOGGING HERE
+        logger.info(f"Received data in modify_script: {data}")
         
         script_id = data.get('script_id')
         modification_request = data.get('modification_request')
         script_content = data.get('script_content') # Get current content from request
 
-        if not script_id or not modification_request or script_content is None:
-            return jsonify({"success": False, "error": "Missing script_id, modification_request, or script_content"}), 400
+        if not modification_request or script_content is None:
+            return jsonify({"success": False, "error": "Missing modification_request or script_content"}), 400
 
-        script = Script.query.get(script_id)
-        if not script:
-            return jsonify({"success": False, "error": "Script not found"}), 404
+        # If script_id is missing but we have content, we can still proceed with modification
+        script = None
+        if script_id:
+            script = Script.query.get(script_id)
+            if not script:
+                logger.warning(f"Script ID {script_id} not found in database")
+        else:
+            logger.warning("No script_id provided, proceeding with content-only modification")
 
-        logger.debug(f"Calling coding_module.modify_script for script ID: {script_id}")
+        logger.debug(f"Calling coding_module.modify_script")
         # Call refactored modify method (returns modified code string or error string)
         modified_code = coding_module.modify_script(script_content, modification_request)
 
@@ -304,7 +316,7 @@ def modify_script():
         
         # --- Database Interaction (Code Changed) --- 
         version_dict = None
-        if modified_code != script_content:
+        if script and modified_code != script_content:
             logger.debug(f"Saving modified version for script ID: {script_id}")
             latest_version = ScriptVersion.query.filter_by(script_id=script.id).order_by(ScriptVersion.version.desc()).first()
             new_version_num = (latest_version.version + 1) if latest_version else 1
@@ -325,13 +337,15 @@ def modify_script():
             logger.info(f"Created modified ScriptVersion ID: {new_version.id} for Script ID: {script.id}")
             version_dict = new_version.to_dict()
         else:
-             logger.info(f"Modification complete for script {script_id}, code was identical.")
-             version_dict = None # No new version created
+            if script:
+                logger.info(f"Modification complete for script {script_id}, code was identical or not changed.")
+            else:
+                logger.info("Modification completed without script ID, no version saved to database")
              
         return jsonify({
             "success": True,
             "modified_code": modified_code,
-            "script_id": script_id,
+            "script_id": script_id if script else None,
             "new_version": version_dict # Include new version info if created
         })
 
@@ -388,29 +402,46 @@ def generate_test_case():
     try:
         data = request.json
         logger.info(f"Received data in generate_test_case: {data}")
+        
         script_id = data.get('script_id')
-        # Fetch script content and language from DB based on script_id
-        # script_content = data.get('script_content') # No longer needed in request
-        # language = data.get('language') # No longer needed in request
+        script_content = data.get('script_content') # Allow direct content submission
+        language = data.get('language') # Allow language override
         requirements = data.get('requirements', 'Generate standard unit tests.') # Optional requirements
 
-        if not script_id:
-            logger.error(f"Missing script_id: {script_id}")
-            return jsonify({"success": False, "error": "Missing script_id"}), 400
+        # At least one of script_id or script_content must be provided
+        if not script_id and not script_content:
+            logger.error(f"Missing both script_id and script_content")
+            return jsonify({"success": False, "error": "Either script_id or script_content must be provided"}), 400
 
-        script = Script.query.get(script_id)
-        if not script:
-            logger.error(f"Script not found for ID: {script_id}")
-            return jsonify({"success": False, "error": "Script not found"}), 404
+        # If script_id is provided, try to fetch from database
+        script = None
+        if script_id:
+            script = Script.query.get(script_id)
+            if not script:
+                logger.error(f"Script not found for ID: {script_id}")
+                if not script_content:
+                    return jsonify({"success": False, "error": "Script not found"}), 404
+                else:
+                    logger.info(f"Script ID {script_id} not found, but proceeding with provided content")
         
-        script_content = script.content
-        language = script.language
+        # Use script content from database if we found a script and no override was provided
+        if script and not script_content:
+            script_content = script.content
+            language = language or script.language
+        elif not language:  # If no language was provided or obtained from script
+            # Try to guess language from content or default to python
+            if script_content and "function" in script_content and ("{" in script_content or "=>" in script_content):
+                language = "javascript"
+            elif script_content and "#include" in script_content:
+                language = "cpp" if "class" in script_content else "c"
+            else:
+                language = "python"  # Default to Python
 
-        if not script_content or not language:
-             logger.error(f"Missing script content or language for script ID: {script_id}")
-             return jsonify({"success": False, "error": "Script content or language missing in database for the selected script."}), 400
+        if not script_content:
+             logger.error(f"Missing script content for test generation")
+             return jsonify({"success": False, "error": "Script content missing"}), 400
 
-        logger.debug(f"Calling testing_module.generate_test_cases for script ID: {script_id} ({language})")
+        logger.debug(f"Calling testing_module.generate_test_cases with language: {language}")
         # Call refactored generate method (expects script content and language)
         result = testing_module.generate_test_cases(script_content, language, requirements)
 
@@ -421,21 +452,37 @@ def generate_test_case():
         generated_tests = result.get('test_cases') # This is the generated code string
 
         # --- Database Interaction --- 
-        logger.debug(f"Saving generated test case for script ID: {script_id}")
-        new_test_case = TestCase(
-            script_id=script.id,
-            title=f"Tests for {script.title[:50]}", # Truncate title if long
-            content=generated_tests,
-            language=language, # Store the language used for generation
-            requirements=requirements
-        )
-        db.session.add(new_test_case)
-        db.session.commit()
-        logger.info(f"Created new TestCase ID: {new_test_case.id} for Script ID: {script.id}")
+        # Only save to database if we have a script_id
+        if script:
+            logger.debug(f"Saving generated test case for script ID: {script.id}")
+            new_test_case = TestCase(
+                script_id=script.id,
+                title=f"Tests for {script.title[:50]}", # Truncate title if long
+                content=generated_tests,
+                language=language, # Store the language used for generation
+                requirements=requirements
+            )
+            db.session.add(new_test_case)
+            db.session.commit()
+            logger.info(f"Created new TestCase ID: {new_test_case.id} for Script ID: {script.id}")
+            
+            test_case_dict = new_test_case.to_dict()
+        else:
+            # If no script_id, create a temporary test case object but don't save to DB
+            logger.info("Created test case without saving to database (no script_id)")
+            test_case_dict = {
+                "id": None,
+                "script_id": None,
+                "title": "Generated Test Case",
+                "content": generated_tests,
+                "language": language,
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat()
+            }
 
         return jsonify({
             "success": True, 
-            "test_case": new_test_case.to_dict() # Return saved test case data
+            "test_case": test_case_dict # Return saved or temp test case data
         }), 201
 
     except Exception as e:
@@ -452,61 +499,99 @@ def execute_test_case():
 
     try:
         data = request.json
+        logger.info(f"Received data in execute_test_case: {data}")
+        
         test_case_id = data.get('test_case_id')
-        # Script content, test content, and language will be fetched from DB
+        # Allow direct content execution when no test_case_id is provided
+        script_content = data.get('script_content')
+        test_content = data.get('test_content')
+        language = data.get('language', 'python')  # Default to python
 
-        if not test_case_id:
-            return jsonify({"success": False, "error": "Missing test_case_id"}), 400
+        # Check if we have the necessary test case info
+        if not test_case_id and (not script_content or not test_content):
+            return jsonify({
+                "success": False, 
+                "error": "Either test_case_id or both script_content and test_content must be provided"
+            }), 400
 
-        test_case = TestCase.query.get(test_case_id)
-        if not test_case:
-            return jsonify({"success": False, "error": "Test Case not found"}), 404
-            
-        script = Script.query.get(test_case.script_id)
-        if not script:
-            return jsonify({"success": False, "error": "Associated Script not found"}), 404
-            
-        script_content = script.content
-        test_content = test_case.content
-        # Use language from test case or script as fallback
-        language = test_case.language if test_case.language else script.language 
+        # If test_case_id is provided, fetch content from database
+        if test_case_id:
+            test_case = TestCase.query.get(test_case_id)
+            if not test_case:
+                return jsonify({"success": False, "error": "Test Case not found"}), 404
+                
+            script = Script.query.get(test_case.script_id)
+            if not script:
+                return jsonify({"success": False, "error": "Associated Script not found"}), 404
+                
+            script_content = script.content
+            test_content = test_case.content
+            # Use language from test case or script as fallback
+            language = test_case.language if test_case.language else script.language
+        
+        # Final validation of content
+        if not script_content or not test_content:
+             return jsonify({"success": False, "error": "Missing content for script or test case."}), 400
 
-        if not script_content or not test_content or not language:
-             return jsonify({"success": False, "error": "Missing content or language for script or test case."}), 400
-
-        logger.debug(f"Calling testing_module.execute_test for TestCase ID: {test_case_id} ({language})")
+        logger.debug(f"Calling testing_module.execute_test with language: {language}")
         # Call the execute_test method from the module
         # This method handles temporary files and subprocess execution
         # It returns a dict: {'success': bool, 'results': str, 'error': str (optional)} 
         result = testing_module.execute_test(script_content, test_content, language)
 
         # --- Database Interaction --- 
-        logger.debug(f"Saving test result for TestCase ID: {test_case_id}")
-        # Determine status based on success flag and presence of error key
-        if result.get('success'):
-            status = "passed"
-            output = result.get('results', 'Execution successful, no output captured.')
-        elif 'error' in result:
-             status = "error"
-             output = result.get('error', 'An unknown execution error occurred.')
+        # Only save results to database if we have a test_case_id
+        test_result_dict = None
+        if test_case_id:
+            logger.debug(f"Saving test result for TestCase ID: {test_case_id}")
+            # Determine status based on success flag and presence of error key
+            if result.get('success'):
+                status = "passed"
+                output = result.get('results', 'Execution successful, no output captured.')
+            elif 'error' in result:
+                 status = "error"
+                 output = result.get('error', 'An unknown execution error occurred.')
+            else:
+                 status = "failed"
+                 output = result.get('results', 'Execution failed, no specific error captured.')
+                 
+            test_result = TestResult(
+                test_case_id=test_case_id,
+                status=status,
+                output=output,
+                # execution_time=result.get('execution_time', 0) # Module doesn't provide this yet
+            )
+            db.session.add(test_result)
+            db.session.commit()
+            logger.info(f"Saved TestResult ID: {test_result.id} with status '{status}' for TestCase ID: {test_case_id}")
+            
+            test_result_dict = test_result.to_dict()
         else:
-             status = "failed"
-             output = result.get('results', 'Execution failed, no specific error captured.')
-             
-        test_result = TestResult(
-            test_case_id=test_case.id,
-            status=status,
-            output=output,
-            # execution_time=result.get('execution_time', 0) # Module doesn't provide this yet
-        )
-        db.session.add(test_result)
-        db.session.commit()
-        logger.info(f"Saved TestResult ID: {test_result.id} with status '{status}' for TestCase ID: {test_case.id}")
+            # If no test_case_id, create a temporary result object but don't save to DB
+            logger.info("Created test result without saving to database (no test_case_id)")
+            if result.get('success'):
+                status = "passed"
+                output = result.get('results', 'Execution successful, no output captured.')
+            elif 'error' in result:
+                status = "error"
+                output = result.get('error', 'An unknown execution error occurred.')
+            else:
+                status = "failed"
+                output = result.get('results', 'Execution failed, no specific error captured.')
+                
+            test_result_dict = {
+                "id": None,
+                "test_case_id": None,
+                "status": status,
+                "output": output,
+                "execution_time": result.get('execution_time', 0),
+                "created_at": datetime.utcnow().isoformat()
+            }
 
         # Return the result from the module along with the saved DB record
         return jsonify({
             "success": result.get('success', False), # Reflect the actual execution success 
-            "test_result": test_result.to_dict(), # Include the saved result details
+            "test_result": test_result_dict, # Include the saved result details
             "message": "Test execution completed."
         })
 
@@ -515,17 +600,24 @@ def execute_test_case():
         logger.error(traceback.format_exc())
         # Attempt to save an error result to DB even if API call fails
         try:
-            if 'test_case' in locals() and test_case:
+            if 'test_case_id' in locals() and test_case_id:
                 error_result = TestResult(
-                    test_case_id=test_case.id,
+                    test_case_id=test_case_id,
                     status="error",
                     output=f"API Error during execution: {str(e)}\n{traceback.format_exc()}"
                 )
                 db.session.add(error_result)
                 db.session.commit()
-                logger.info(f"Saved error TestResult for TestCase ID: {test_case.id} due to API exception.")
+                logger.info(f"Saved error TestResult for TestCase ID: {test_case_id} due to API exception.")
+                
+                return jsonify({
+                    "success": False, 
+                    "error": str(e), 
+                    "test_result": error_result.to_dict(),
+                    "message": "Failed to execute test case"
+                }), 500
             else:
-                 logger.warning("Could not save error TestResult as test_case object was not available.")
+                 logger.warning("Could not save error TestResult as test_case_id was not available.")
         except Exception as db_err:
             logger.error(f"Failed to save error result to DB after API exception: {db_err}")
             db.session.rollback() # Rollback the failed attempt to save error result
@@ -540,9 +632,114 @@ def improve_test_case():
     logger.warning("'/api/testing/improve' endpoint called but is not implemented with the new modules.")
     return jsonify({
         "success": False, 
-        "error": "Not Implemented", 
-        "message": "This feature (improve test case) is not currently available."
+        "error": "This endpoint is not yet implemented with the new OpenRouter modules.",
+        "message": "Feature not implemented"
     }), 501
+
+# Add missing route for getting available test cases
+@app.route('/api/testing/test-cases', methods=['GET'])
+def get_test_cases():
+    try:
+        script_id = request.args.get('script_id')
+        
+        if not script_id:
+            return jsonify({"success": False, "error": "Missing script_id parameter"}), 400
+            
+        # Check if script exists
+        script = Script.query.get(script_id)
+        if not script:
+            return jsonify({"success": False, "error": "Script not found"}), 404
+            
+        # Get test cases for the script
+        test_cases = TestCase.query.filter_by(script_id=script_id).order_by(TestCase.created_at.desc()).all()
+        
+        return jsonify({
+            "success": True,
+            "test_cases": [test_case.to_dict() for test_case in test_cases],
+            "script_id": script_id
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_test_cases API: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e), "message": "Failed to get test cases"}), 500
+
+# Add missing route for getting a specific test case
+@app.route('/api/testing/test-cases/<int:test_case_id>', methods=['GET'])
+def get_test_case(test_case_id):
+    try:
+        test_case = TestCase.query.get(test_case_id)
+        
+        if not test_case:
+            return jsonify({"success": False, "error": "Test case not found"}), 404
+            
+        return jsonify({
+            "success": True,
+            "test_case": test_case.to_dict()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_test_case API: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e), "message": "Failed to get test case"}), 500
+
+# Get all scripts
+@app.route('/api/coding/scripts', methods=['GET'])
+def get_scripts():
+    try:
+        # Get all scripts
+        scripts = Script.query.order_by(Script.created_at.desc()).all()
+        
+        return jsonify({
+            "success": True,
+            "scripts": [script.to_dict() for script in scripts]
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_scripts API: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e), "message": "Failed to get scripts"}), 500
+
+# Get a specific script
+@app.route('/api/coding/scripts/<int:script_id>', methods=['GET'])
+def get_script(script_id):
+    try:
+        script = Script.query.get(script_id)
+        
+        if not script:
+            return jsonify({"success": False, "error": "Script not found"}), 404
+            
+        return jsonify({
+            "success": True,
+            "script": script.to_dict()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_script API: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e), "message": "Failed to get script"}), 500
+
+# Get script versions
+@app.route('/api/coding/scripts/<int:script_id>/versions', methods=['GET'])
+def get_script_versions(script_id):
+    try:
+        script = Script.query.get(script_id)
+        
+        if not script:
+            return jsonify({"success": False, "error": "Script not found"}), 404
+            
+        versions = ScriptVersion.query.filter_by(script_id=script_id).order_by(ScriptVersion.version.desc()).all()
+        
+        return jsonify({
+            "success": True,
+            "script_id": script_id,
+            "versions": [version.to_dict() for version in versions]
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_script_versions API: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e), "message": "Failed to get script versions"}), 500
 
 # Chat API - Send Message
 @app.route('/api/chat/send', methods=['POST'])
