@@ -150,3 +150,81 @@ class ChatMessage(db.Model):
             'content': self.content,
             'created_at': self.created_at.isoformat()
         }
+
+# New models for FA Transcriber module
+class Image(db.Model):
+    """Model for storing uploaded FA diagram images."""
+    __tablename__ = 'images'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(255), nullable=False)
+    data = db.Column(db.LargeBinary, nullable=False)
+    content_type = db.Column(db.String(100), nullable=False)
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationship with transcriptions
+    transcriptions = db.relationship('FATranscription', backref='image', lazy='dynamic', cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<Image {self.filename}>'
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'filename': self.filename,
+            'content_type': self.content_type,
+            'uploaded_at': self.uploaded_at.isoformat()
+        }
+
+class FATranscription(db.Model):
+    """Model for storing FA transcription sessions."""
+    __tablename__ = 'fa_transcriptions'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    image_id = db.Column(db.Integer, db.ForeignKey('images.id'), nullable=False)
+    processed_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationship with transcription items
+    items = db.relationship('FATranscriptionItem', backref='transcription', lazy='dynamic', cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<FATranscription {self.id}>'
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'image_id': self.image_id,
+            'processed_at': self.processed_at.isoformat()
+        }
+
+class FATranscriptionItem(db.Model):
+    """Model for storing individual FA transcription items."""
+    __tablename__ = 'fa_transcription_items'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    transcription_id = db.Column(db.Integer, db.ForeignKey('fa_transcriptions.id'), nullable=False)
+    sheet_name = db.Column(db.String(255))
+    message = db.Column(db.Text)
+    start_ecu = db.Column(db.String(255))
+    end_ecu = db.Column(db.String(255))
+    sending_ecu = db.Column(db.String(255))
+    receiving_ecu = db.Column(db.String(255))
+    dashed_line = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<FATranscriptionItem {self.id}>'
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'transcription_id': self.transcription_id,
+            'sheet_name': self.sheet_name,
+            'message': self.message,
+            'start_ecu': self.start_ecu,
+            'end_ecu': self.end_ecu,
+            'sending_ecu': self.sending_ecu,
+            'receiving_ecu': self.receiving_ecu,
+            'dashed_line': self.dashed_line,
+            'created_at': self.created_at.isoformat()
+        }
