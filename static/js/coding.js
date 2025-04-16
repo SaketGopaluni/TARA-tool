@@ -104,7 +104,20 @@ function handleDebugScriptFormSubmit(form, scriptContentInput, errorLogInput, re
         const scriptContent = scriptContentInput.value.trim();
         const errorLog = errorLogInput.value.trim(); 
         const scriptId = scriptContentInput.dataset.scriptId; 
+        console.log('Retrieved scriptId from dataset:', scriptId); 
 
+        if (!scriptId) {
+            console.error('Script ID is missing from the debug form dataset!');
+            showToast('Error: Could not find Script ID. Please generate the script again.', 'error');
+            // Optionally re-enable the button
+            const submitButton = form.querySelector('button[type="submit"]');
+            if(submitButton) {
+                submitButton.disabled = false;
+                submitButton.innerHTML = 'Debug Script';
+            }
+            return; // Stop execution if ID is missing
+        }
+        
         if (!scriptContent) {
             showToast('Please enter the script content to debug', 'error');
             return;
@@ -112,9 +125,6 @@ function handleDebugScriptFormSubmit(form, scriptContentInput, errorLogInput, re
         if (!errorLog) {
             showToast('Please enter the error log or description', 'error');
             return;
-        }
-        if (!scriptId) {
-            console.warn('Script ID not found for debugging. Sending content only.');
         }
         
         const submitButton = form.querySelector('button[type="submit"]');
