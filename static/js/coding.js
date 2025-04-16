@@ -113,7 +113,7 @@ function handleGenerateScriptFormSubmit(form, promptInput, languageSelect, resul
 }
 
 // Handle Debug Script form submission
-function handleDebugScriptFormSubmit(form, scriptContentInput, errorLogInput, resultContainer) { 
+function handleDebugScriptFormSubmit(form, scriptContentInput, errorLogInput, resultContainer) {
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
         
@@ -140,7 +140,6 @@ function handleDebugScriptFormSubmit(form, scriptContentInput, errorLogInput, re
             const hiddenInput = document.getElementById('debug-script-id');
             if (hiddenInput) {
                 scriptId = hiddenInput.value;
-                console.log('Retrieved scriptId from hidden input:', scriptId);
             }
         }
 
@@ -154,26 +153,15 @@ function handleDebugScriptFormSubmit(form, scriptContentInput, errorLogInput, re
             showToast('Please enter the script content to debug', 'error');
             return;
         }
-        if (!errorLog) {
-            showToast('Please enter the error log or description', 'error');
-            return;
-        }
         
-        const submitButton = form.querySelector('button[type="submit"]');
+        const submitButton = this.querySelector('button[type="submit"]');
         submitButton.disabled = true;
         submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Debugging...';
         
         resultContainer.classList.remove('hidden');
-        const explanationElement = resultContainer.querySelector('.debug-explanation');
-        const codeElement = resultContainer.querySelector('#debug-code'); 
-        const saveButton = resultContainer.querySelector('.btn-save-debugged'); 
-        const copyButton = resultContainer.querySelector('.btn-copy');
-
-        explanationElement.textContent = 'Debugging in progress...';
-        codeElement.textContent = 'Please wait...';
-        hljs.highlightElement(codeElement); 
-        if(saveButton) saveButton.classList.add('hidden');
-        if(copyButton) copyButton.disabled = true;
+        const explanationElement = document.getElementById('debug-explanation');
+        const diffElement = document.getElementById('debug-diff');
+        const codeElement = document.getElementById('debug-code');
 
         try {
             const requestData = { 
@@ -193,36 +181,33 @@ function handleDebugScriptFormSubmit(form, scriptContentInput, errorLogInput, re
             });
             
             const result = await response.json(); 
+            console.log('Debug API response:', result);
 
             if (response.ok && result.success) {
-                const analysis = result.analysis; 
-                const fixedCode = result.fixed_code;
-                const newVersion = result.new_version; // Get new version info (might be null)
+                // Display the explanation
+                explanationElement.textContent = result.explanation || result.analysis || 'No explanation provided';
                 
-                explanationElement.textContent = analysis || 'No analysis provided.';
-                codeElement.textContent = fixedCode; 
-                console.log('Setting debug code output:', fixedCode);
+                // Display the diff
+                diffElement.innerHTML = result.diff_html || '';
                 
-                hljs.highlightElement(codeElement);
-                
-                // Update dataset if a new version was created
-                if (newVersion) {
-                    resultContainer.dataset.newVersionId = newVersion.id; 
-                    // Potentially update the main script ID reference if needed
-                    // scriptContentInput.dataset.scriptId = result.script_id; // Ensure scriptId remains consistent
+                // Display the fixed code with fallbacks
+                if (codeElement) {
+                    // Try multiple possible field names for the fixed code with fallback to original
+                    const fixedCode = result.fixed_code || result.fixed_script || scriptContent;
+                    codeElement.textContent = fixedCode;
+                    console.log('Setting debug code output:', fixedCode.substring(0, 100) + '...');
+                    
+                    // Apply syntax highlighting
+                    hljs.highlightElement(codeElement);
                 } else {
-                    // Clear old version ID if no new version was created
-                    delete resultContainer.dataset.newVersionId;
+                    console.error('Could not find element with ID "debug-code"');
                 }
                 
-                if(saveButton) saveButton.classList.remove('hidden');
-                if(copyButton) copyButton.disabled = false;
-
                 showToast('Debugging complete!', 'success');
-
             } else {
                 const errorMessage = result.error || 'Failed to debug script. Unknown error.';
                 explanationElement.textContent = 'Error';
+                diffElement.innerHTML = '';
                 codeElement.textContent = errorMessage;
                 showToast(errorMessage, 'error');
             }
@@ -230,6 +215,7 @@ function handleDebugScriptFormSubmit(form, scriptContentInput, errorLogInput, re
         } catch (error) {
             console.error('Error debugging script:', error);
             explanationElement.textContent = 'Error';
+            diffElement.innerHTML = '';
             codeElement.textContent = `An error occurred: ${error.message}`;
             showToast('An error occurred while debugging the script.', 'error');
         } finally {
@@ -244,8 +230,19 @@ function handleModifyScriptFormSubmit(form, scriptContentInput, modificationRequ
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
         
-        const scriptContent = scriptContentInput.value.trim();
-        const modificationRequest = modificationRequestInput.value.trim();
+        if (!scriptContentInput) {
+            console.error('Could not find element with ID "modify-content"');
+            showToast('Internal Error: Modify form elements missing. Cannot find content area.', 'error');
+            return;
+        }
+        if (!modificationRequestInput) {
+            console.error('Could not find element with ID "modification-request"');
+            showToast('Internal Error: Modify form elements missing. Cannot find modification request area.', 'error');
+            return;
+        }
+
+        const scriptContent = scriptContentInput.value.trim();            
+        const modificationRequest = modificationRequestInput.value.trim();                      
         
         // Get script ID - first try dataset, then fallback to hidden input
         let scriptId = scriptContentInput.dataset.scriptId;
@@ -256,48 +253,42 @@ function handleModifyScriptFormSubmit(form, scriptContentInput, modificationRequ
             const hiddenInput = document.getElementById('modify-script-id');
             if (hiddenInput) {
                 scriptId = hiddenInput.value;
-                console.log('Retrieved scriptId from hidden input:', scriptId);
             }
         }
 
         if (!scriptId) {
             console.error('Script ID is missing from both dataset and hidden input!');
             showToast('Error: Could not find Script ID. Please generate the script again.', 'error');
-            return; // Stop execution if ID is missing
+            return;
         }
         
         if (!scriptContent) {
             showToast('Please enter the script content to modify', 'error');
             return;
         }
+        
         if (!modificationRequest) {
             showToast('Please enter the modification request', 'error');
             return;
         }
         
-        const submitButton = form.querySelector('button[type="submit"]');
+        const submitButton = this.querySelector('button[type="submit"]');
         submitButton.disabled = true;
         submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Modifying...';
         
         resultContainer.classList.remove('hidden');
-        const explanationElement = resultContainer.querySelector('#modify-explanation');
-        const diffElement = resultContainer.querySelector('#modify-diff');
-        const codeElement = resultContainer.querySelector('#modify-code'); 
-        const saveButton = resultContainer.querySelector('.btn-save-modified'); 
-        const copyButton = resultContainer.querySelector('.btn-copy');
+        const explanationElement = document.getElementById('modify-explanation');
+        const diffElement = document.getElementById('modify-diff');
+        const codeElement = document.getElementById('modify-code');
 
-        explanationElement.textContent = 'Modifying script...';
-        diffElement.innerHTML = 'Calculating changes...';
-        codeElement.textContent = 'Please wait...';
-        
         try {
             const requestData = { 
                 script_id: scriptId, 
-                script_content: scriptContent,
+                script_content: scriptContent, 
                 modification_request: modificationRequest 
             };
             console.log('Sending requestData to /api/coding/modify:', requestData); 
-            
+
             const response = await fetch('/api/coding/modify', { 
                 method: 'POST',
                 headers: {
@@ -308,26 +299,29 @@ function handleModifyScriptFormSubmit(form, scriptContentInput, modificationRequ
             });
             
             const result = await response.json(); 
+            console.log('Modify API response:', result);
 
             if (response.ok && result.success) {
-                const explanation = result.explanation || 'Script modified successfully.';
-                const modifiedCode = result.modified_code;
-                const diffHtml = result.diff_html || generateSimpleDiff(scriptContent, modifiedCode);
-                const newVersion = result.new_version; // Get new version info (might be null)
+                // Display the explanation
+                explanationElement.textContent = result.explanation || 'Script modification completed successfully';
                 
-                explanationElement.textContent = explanation;
-                diffElement.innerHTML = diffHtml;
-                codeElement.textContent = modifiedCode; 
-                console.log('Setting modified code output:', modifiedCode);
+                // Display the diff
+                diffElement.innerHTML = result.diff_html || '';
                 
-                hljs.highlightElement(codeElement);
-
-                resultContainer.dataset.newVersionId = newVersion.id;
-                if(saveButton) saveButton.classList.remove('hidden');
-                if(copyButton) copyButton.disabled = false;
-
+                // Display the modified code with fallbacks
+                if (codeElement) {
+                    // Try multiple possible field names for the modified code with fallback to original
+                    const modifiedCode = result.modified_code || result.modified_script || scriptContent;
+                    codeElement.textContent = modifiedCode;
+                    console.log('Setting modified code output:', modifiedCode.substring(0, 100) + '...');
+                    
+                    // Apply syntax highlighting
+                    hljs.highlightElement(codeElement);
+                } else {
+                    console.error('Could not find element with ID "modify-code"');
+                }
+                
                 showToast('Modification complete!', 'success');
-
             } else {
                 const errorMessage = result.error || 'Failed to modify script. Unknown error.';
                 explanationElement.textContent = 'Error';
@@ -439,106 +433,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const scriptContentInput = document.getElementById('debug-content'); 
         const errorLogInput = document.getElementById('error-log'); 
         const resultContainer = document.getElementById('debug-result');
-        debugScriptForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            if (!scriptContentInput) {
-                console.error('Could not find element with ID "debug-content"');
-                showToast('Internal Error: Debug form elements missing. Cannot find content area.', 'error');
-                return;
-            }
-            if (!errorLogInput) {
-                console.error('Could not find element with ID "error-log"');
-                showToast('Internal Error: Debug form elements missing. Cannot find error log area.', 'error');
-                return;
-            }
-
-            const scriptContent = scriptContentInput.value.trim();            
-            const errorLog = errorLogInput.value.trim();                      
-            
-            // Get script ID - first try dataset, then fallback to hidden input
-            let scriptId = scriptContentInput.dataset.scriptId;
-            console.log('Retrieved scriptId from dataset:', scriptId);
-            
-            // If dataset scriptId is missing, try the hidden input
-            if (!scriptId) {
-                const hiddenInput = document.getElementById('debug-script-id');
-                if (hiddenInput) {
-                    scriptId = hiddenInput.value;
-                }
-            }
-
-            if (!scriptId) {
-                console.error('Script ID is missing from both dataset and hidden input!');
-                showToast('Error: Could not find Script ID. Please generate the script again.', 'error');
-                return;
-            }
-            
-            if (!scriptContent) {
-                showToast('Please enter the script content to debug', 'error');
-                return;
-            }
-            
-            const submitButton = this.querySelector('button[type="submit"]');
-            submitButton.disabled = true;
-            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Debugging...';
-            
-            resultContainer.classList.remove('hidden');
-            const explanationElement = document.getElementById('debug-explanation');
-            const diffElement = document.getElementById('debug-diff');
-            const codeElement = document.getElementById('debug-code');
-
-            try {
-                const requestData = { 
-                    script_id: scriptId, 
-                    script_content: scriptContent, 
-                    error_log: errorLog 
-                };
-                console.log('Sending requestData to /api/coding/debug:', requestData); 
-
-                const response = await fetch('/api/coding/debug', { 
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getCsrfToken() 
-                    },
-                    body: JSON.stringify(requestData)
-                });
-                
-                const result = await response.json(); 
-                console.log('Debug API response:', result);
-
-                if (response.ok && result.success) {
-                    // Display the explanation
-                    explanationElement.textContent = result.explanation || result.analysis || 'No explanation provided';
-                    
-                    // Display the diff
-                    diffElement.innerHTML = result.diff_html || '';
-                    
-                    // Display the fixed code
-                    codeElement.textContent = result.fixed_code || '';
-                    
-                    // Apply syntax highlighting
-                    hljs.highlightElement(codeElement);
-                    
-                    showToast('Debugging complete!', 'success');
-                } else {
-                    const errorMessage = result.error || 'Failed to debug script. Unknown error.';
-                    explanationElement.textContent = 'Error';
-                    codeElement.textContent = errorMessage;
-                    showToast(errorMessage, 'error');
-                }
-                
-            } catch (error) {
-                console.error('Error debugging script:', error);
-                explanationElement.textContent = 'Error';
-                codeElement.textContent = `An error occurred: ${error.message}`;
-                showToast('An error occurred while debugging the script.', 'error');
-            } finally {
-                submitButton.disabled = false;
-                submitButton.innerHTML = 'Debug Script';
-            }
-        });
+        handleDebugScriptFormSubmit(debugScriptForm, scriptContentInput, errorLogInput, resultContainer);
     }
     
     const modifyScriptForm = document.getElementById('modify-form');
@@ -546,113 +441,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const scriptContentInput = document.getElementById('modify-content'); 
         const modificationRequestInput = document.getElementById('modification-request'); 
         const resultContainer = document.getElementById('modify-result');
-        modifyScriptForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            if (!scriptContentInput) {
-                console.error('Could not find element with ID "modify-content"');
-                showToast('Internal Error: Modify form elements missing. Cannot find content area.', 'error');
-                return;
-            }
-            if (!modificationRequestInput) {
-                console.error('Could not find element with ID "modification-request"');
-                showToast('Internal Error: Modify form elements missing. Cannot find modification request area.', 'error');
-                return;
-            }
-
-            const scriptContent = scriptContentInput.value.trim();            
-            const modificationRequest = modificationRequestInput.value.trim();                      
-            
-            // Get script ID - first try dataset, then fallback to hidden input
-            let scriptId = scriptContentInput.dataset.scriptId;
-            console.log('Retrieved scriptId from dataset:', scriptId);
-            
-            // If dataset scriptId is missing, try the hidden input
-            if (!scriptId) {
-                const hiddenInput = document.getElementById('modify-script-id');
-                if (hiddenInput) {
-                    scriptId = hiddenInput.value;
-                }
-            }
-
-            if (!scriptId) {
-                console.error('Script ID is missing from both dataset and hidden input!');
-                showToast('Error: Could not find Script ID. Please generate the script again.', 'error');
-                return;
-            }
-            
-            if (!scriptContent) {
-                showToast('Please enter the script content to modify', 'error');
-                return;
-            }
-            
-            if (!modificationRequest) {
-                showToast('Please enter the modification request', 'error');
-                return;
-            }
-            
-            const submitButton = this.querySelector('button[type="submit"]');
-            submitButton.disabled = true;
-            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Modifying...';
-            
-            resultContainer.classList.remove('hidden');
-            const explanationElement = document.getElementById('modify-explanation');
-            const diffElement = document.getElementById('modify-diff');
-            const codeElement = document.getElementById('modify-code');
-
-            try {
-                const requestData = { 
-                    script_id: scriptId, 
-                    script_content: scriptContent, 
-                    modification_request: modificationRequest 
-                };
-                console.log('Sending requestData to /api/coding/modify:', requestData); 
-
-                const response = await fetch('/api/coding/modify', { 
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getCsrfToken() 
-                    },
-                    body: JSON.stringify(requestData)
-                });
-                
-                const result = await response.json(); 
-                console.log('Modify API response:', result);
-
-                if (response.ok && result.success) {
-                    // Display the explanation
-                    explanationElement.textContent = result.explanation || 'Script modification completed successfully';
-                    
-                    // Display the diff
-                    diffElement.innerHTML = result.diff_html || '';
-                    
-                    // Display the modified code
-                    codeElement.textContent = result.modified_code || '';
-                    
-                    // Apply syntax highlighting
-                    hljs.highlightElement(codeElement);
-                    
-                    showToast('Modification complete!', 'success');
-                } else {
-                    const errorMessage = result.error || 'Failed to modify script. Unknown error.';
-                    explanationElement.textContent = 'Error';
-                    diffElement.innerHTML = '';
-                    codeElement.textContent = errorMessage;
-                    showToast(errorMessage, 'error');
-                }
-                
-            } catch (error) {
-                console.error('Error modifying script:', error);
-                explanationElement.textContent = 'Error';
-                diffElement.innerHTML = '';
-                codeElement.textContent = `An error occurred: ${error.message}`;
-                showToast('An error occurred while modifying the script.', 'error');
-            } finally {
-                submitButton.disabled = false;
-                submitButton.innerHTML = 'Modify Script';
-            }
-        });
+        handleModifyScriptFormSubmit(modifyScriptForm, scriptContentInput, modificationRequestInput, resultContainer);
     }
     
     document.querySelectorAll('.btn-copy').forEach(button => {
