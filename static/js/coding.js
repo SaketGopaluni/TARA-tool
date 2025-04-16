@@ -64,26 +64,30 @@ function handleGenerateScriptFormSubmit(form, promptInput, languageSelect, resul
                 // --- Populate Debug and Modify Forms --- 
                 const debugScriptContentInput = document.getElementById('debug-content'); 
                 const modifyScriptContentInput = document.getElementById('modify-content'); 
+                const debugScriptIdInput = document.getElementById('debug-script-id');
+                const modifyScriptIdInput = document.getElementById('modify-script-id');
                 
                 if (debugScriptContentInput) {
                     debugScriptContentInput.value = scriptData.content;
                     debugScriptContentInput.dataset.scriptId = scriptData.id;
+                    console.log(`[Generate Success] Set dataset.scriptId = ${scriptData.id} on debug input:`, debugScriptContentInput.dataset);
                 }
+                
                 if (modifyScriptContentInput) {
                     modifyScriptContentInput.value = scriptData.content;
                     modifyScriptContentInput.dataset.scriptId = scriptData.id;
+                    console.log(`[Generate Success] Set dataset.scriptId = ${scriptData.id} on modify input:`, modifyScriptContentInput.dataset);
                 }
-                console.log(`[Generate Success] Set dataset.scriptId = ${scriptData.id} on debug input:`, debugScriptContentInput.dataset);
-                console.log(`[Generate Success] Set dataset.scriptId = ${scriptData.id} on modify input:`, modifyScriptContentInput.dataset);
 
-                // Also update the hidden input in the forms if they exist
-                const debugHiddenId = document.getElementById('debug-script-id');
-                if (debugHiddenId) {
-                    debugHiddenId.value = scriptData.id;
+                // Update the hidden input fields with script ID
+                if (debugScriptIdInput) {
+                    debugScriptIdInput.value = scriptData.id;
+                    console.log(`[Generate Success] Set hidden input script ID = ${scriptData.id} for debug form`);
                 }
-                const modifyHiddenId = document.getElementById('modify-script-id');
-                if (modifyHiddenId) {
-                    modifyHiddenId.value = scriptData.id;
+                
+                if (modifyScriptIdInput) {
+                    modifyScriptIdInput.value = scriptData.id;
+                    console.log(`[Generate Success] Set hidden input script ID = ${scriptData.id} for modify form`);
                 }
                 // --- End Population ---
 
@@ -138,11 +142,22 @@ function handleDebugScriptFormSubmit(form, scriptContentInput, errorLogInput, re
         const scriptContent = scriptContentInput.value.trim();            
         const errorLog = errorLogInput.value.trim();                      
         console.log('Debug content input dataset just before reading scriptId:', scriptContentInput.dataset);
-        const scriptId = scriptContentInput.dataset.scriptId;             
-        console.log('Retrieved scriptId from dataset:', scriptId);        
+        
+        // Get script ID - first try dataset, then fallback to hidden input
+        let scriptId = scriptContentInput.dataset.scriptId;
+        console.log('Retrieved scriptId from dataset:', scriptId);
+        
+        // If dataset scriptId is missing, try the hidden input
+        if (!scriptId) {
+            const hiddenInput = document.getElementById('debug-script-id');
+            if (hiddenInput) {
+                scriptId = hiddenInput.value;
+                console.log('Retrieved scriptId from hidden input:', scriptId);
+            }
+        }
 
         if (!scriptId) {
-            console.error('Script ID is missing from the debug form dataset!');
+            console.error('Script ID is missing from both dataset and hidden input!');
             showToast('Error: Could not find Script ID. Please generate the script again.', 'error');
             // Optionally re-enable the button
             const submitButton = form.querySelector('button[type="submit"]');
@@ -248,8 +263,26 @@ function handleModifyScriptFormSubmit(form, scriptContentInput, modificationRequ
         
         const scriptContent = scriptContentInput.value.trim();
         const modificationRequest = modificationRequestInput.value.trim();
-        const scriptId = scriptContentInput.dataset.scriptId; 
+        
+        // Get script ID - first try dataset, then fallback to hidden input
+        let scriptId = scriptContentInput.dataset.scriptId;
+        console.log('Retrieved scriptId from dataset:', scriptId);
+        
+        // If dataset scriptId is missing, try the hidden input
+        if (!scriptId) {
+            const hiddenInput = document.getElementById('modify-script-id');
+            if (hiddenInput) {
+                scriptId = hiddenInput.value;
+                console.log('Retrieved scriptId from hidden input:', scriptId);
+            }
+        }
 
+        if (!scriptId) {
+            console.error('Script ID is missing from both dataset and hidden input!');
+            showToast('Error: Could not find Script ID. Please generate the script again.', 'error');
+            return; // Stop execution if ID is missing
+        }
+        
         if (!scriptContent) {
             showToast('Please enter the script content to modify', 'error');
             return;
@@ -257,9 +290,6 @@ function handleModifyScriptFormSubmit(form, scriptContentInput, modificationRequ
         if (!modificationRequest) {
             showToast('Please enter the modification request', 'error');
             return;
-        }
-        if (!scriptId) {
-            console.warn('Script ID not found for modification. Sending content only.');
         }
         
         const submitButton = form.querySelector('button[type="submit"]');
