@@ -99,14 +99,17 @@
                         <a href="{{ url_for('index') }}" class="{% if request.path == '/' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                             Home
                         </a>
+                        <a href="{{ url_for('chat') }}" class="{% if request.path == '/chat' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Chat
+                        </a>
+                        <a href="{{ url_for('fa_transcriber') }}" class="{% if request.path == '/fa-transcriber' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            FA Transcriber
+                        </a>
                         <a href="{{ url_for('coding') }}" class="{% if request.path == '/coding' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                             Coding
                         </a>
                         <a href="{{ url_for('testing') }}" class="{% if request.path == '/testing' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                             Testing
-                        </a>
-                        <a href="{{ url_for('chat') }}" class="{% if request.path == '/chat' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                            Chat
                         </a>
                     </div>
                 </div>
@@ -126,14 +129,17 @@
                 <a href="{{ url_for('index') }}" class="{% if request.path == '/' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
                     Home
                 </a>
+                <a href="{{ url_for('chat') }}" class="{% if request.path == '/chat' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
+                    Chat
+                </a>
+                <a href="{{ url_for('fa_transcriber') }}" class="{% if request.path == '/fa-transcriber' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
+                    FA Transcriber
+                </a>
                 <a href="{{ url_for('coding') }}" class="{% if request.path == '/coding' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
                     Coding
                 </a>
                 <a href="{{ url_for('testing') }}" class="{% if request.path == '/testing' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
                     Testing
-                </a>
-                <a href="{{ url_for('chat') }}" class="{% if request.path == '/chat' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
-                    Chat
                 </a>
             </div>
         </div>
