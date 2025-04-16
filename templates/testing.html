@@ -11,6 +11,31 @@
         overflow-wrap: normal;
         overflow-x: scroll;
     }
+    
+    .test-status {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-transform: uppercase;
+    }
+    
+    .test-status-passed {
+        background-color: #d1fae5;
+        color: #047857;
+    }
+    
+    .test-status-failed {
+        background-color: #fee2e2;
+        color: #b91c1c;
+    }
+    
+    .test-status-error {
+        background-color: #fef3c7;
+        color: #92400e;
+    }
 </style>
 {% endblock %}
 
@@ -34,20 +59,31 @@
                 <div class="px-4 py-5 sm:p-6">
                     <h3 class="text-lg leading-6 font-medium text-gray-900">Generate a Test Case</h3>
                     <div class="mt-2 max-w-xl text-sm text-gray-500 mb-4">
-                        <p>Upload your script and specify testing requirements to generate comprehensive test cases.</p>
+                        <p>Select or upload a script and specify testing requirements to generate comprehensive test cases.</p>
                     </div>
                     <form id="generate-test-form" class="mt-5">
+                        <!-- Hidden script ID field -->
+                        <input type="hidden" id="test-script-id" name="script_id" value="">
+                        
                         <div class="mb-4">
-                            <label for="test-script-upload" class="block text-sm font-medium text-gray-700">Upload Script</label>
+                            <label for="test-select-script" class="block text-sm font-medium text-gray-700">Select a Script</label>
+                            <select id="test-select-script" name="script_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                                <option value="">-- Select a script --</option>
+                                <!-- Script options will be populated by JavaScript -->
+                            </select>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label for="test-script-upload" class="block text-sm font-medium text-gray-700">Or Upload Script</label>
                             <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
                                 <div class="space-y-1 text-center">
                                     <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
                                         <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4h-8m-12 0H8m8 0v-8m12 8v-8m12 0h-8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                                     </svg>
                                     <div class="flex text-sm text-gray-600">
-                                        <label for="script-file" class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
+                                        <label for="test-script-file" class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
                                             <span>Upload a file</span>
-                                            <input id="script-file" name="script-file" type="file" class="sr-only" accept=".py,.js,.c,.cpp">
+                                            <input id="test-script-file" name="test-script-file" type="file" class="sr-only" accept=".py,.js,.c,.cpp">
                                         </label>
                                         <p class="pl-1">or drag and drop</p>
                                     </div>
@@ -59,9 +95,9 @@
                             <label for="test-script-content" class="block text-sm font-medium text-gray-700">Script Content</label>
                             <textarea id="test-script-content" name="script_content" rows="8" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono code-textarea" placeholder="Paste your script here or upload a file above"></textarea>
                         </div>
-                        <div>
+                        <div class="mb-4">
                             <label for="test-requirements" class="block text-sm font-medium text-gray-700">Test Requirements</label>
-                            <textarea id="test-requirements" name="test_requirements" rows="4" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Describe what you want to test (e.g., 'Test the CAN message filtering function with various input types and edge cases')"></textarea>
+                            <textarea id="test-requirements" name="requirements" rows="4" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Describe what you want to test (e.g., 'Test the CAN message filtering function with various input types and edge cases')"></textarea>
                         </div>
                         <div class="mt-5">
                             <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
@@ -102,6 +138,85 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Execute Test Case Tab -->
+            <div id="content-execute-test" class="mt-6 bg-white shadow sm:rounded-lg">
+                <div class="px-4 py-5 sm:p-6">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">Execute a Test Case</h3>
+                    <div class="mt-2 max-w-xl text-sm text-gray-500 mb-4">
+                        <p>Select a script and test case to execute and see the results.</p>
+                    </div>
+                    <form id="execute-test-form" class="mt-5">
+                        <div class="mb-4">
+                            <label for="execute-select-script" class="block text-sm font-medium text-gray-700">Select a Script</label>
+                            <select id="execute-select-script" name="script_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                                <option value="">-- Select a script --</option>
+                                <!-- Script options will be populated by JavaScript -->
+                            </select>
+                        </div>
+                        <div class="mb-4">
+                            <label for="execute-select-test" class="block text-sm font-medium text-gray-700">Select a Test Case</label>
+                            <select id="execute-select-test" name="test_case_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md" disabled>
+                                <option value="">-- Select a test case --</option>
+                                <!-- Test case options will be populated by JavaScript after a script is selected -->
+                            </select>
+                        </div>
+                        <div class="mb-4">
+                            <label for="execute-script-content" class="block text-sm font-medium text-gray-700">Script Content (Read-only)</label>
+                            <textarea id="execute-script-content" name="script_content" rows="6" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 bg-gray-50 text-gray-700 focus:outline-none sm:text-sm font-mono code-textarea" readonly></textarea>
+                        </div>
+                        <div class="mb-4">
+                            <label for="execute-test-content" class="block text-sm font-medium text-gray-700">Test Case Content (Read-only)</label>
+                            <textarea id="execute-test-content" name="test_content" rows="6" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 bg-gray-50 text-gray-700 focus:outline-none sm:text-sm font-mono code-textarea" readonly></textarea>
+                        </div>
+                        <div class="mt-5">
+                            <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500" disabled>
+                                Execute Test Case
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <div id="execute-test-loading" class="hidden mt-4 flex items-center justify-center">
+                        <svg class="animate-spin h-5 w-5 text-green-500 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Executing test case...</span>
+                    </div>
+                    
+                    <div id="execute-test-error" class="hidden mt-4 text-red-600 bg-red-50 p-4 rounded-md">
+                    </div>
+                    
+                    <div id="execute-test-result" class="mt-8 hidden">
+                        <div class="border-t border-gray-200 pt-4">
+                            <h4 class="text-lg font-medium text-gray-900 mb-4">Test Execution Results</h4>
+                            
+                            <div class="mb-4 flex items-center space-x-2">
+                                <span class="text-sm font-medium text-gray-700">Status:</span>
+                                <span id="test-status-badge" class="test-status"></span>
+                            </div>
+                            
+                            <div class="mb-4 grid grid-cols-2 gap-4">
+                                <div>
+                                    <span class="text-sm font-medium text-gray-700">Execution Time:</span>
+                                    <span id="test-execution-time" class="ml-2 text-sm text-gray-600">N/A</span>
+                                </div>
+                                <div>
+                                    <span class="text-sm font-medium text-gray-700">Timestamp:</span>
+                                    <span id="test-timestamp" class="ml-2 text-sm text-gray-600"></span>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <h5 class="text-md font-medium text-gray-700 mb-2">Output</h5>
+                                <div class="bg-gray-50 rounded-md p-4 overflow-x-auto">
+                                    <pre id="test-output" class="text-sm text-gray-800 whitespace-pre-wrap"></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </main>
 </div>
@@ -112,6 +227,9 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Elements for Generate Test Case
     const generateTestForm = document.getElementById('generate-test-form');
+    const testSelectScript = document.getElementById('test-select-script');
+    const testScriptFile = document.getElementById('test-script-file');
+    const testScriptId = document.getElementById('test-script-id');
     const testScriptContent = document.getElementById('test-script-content');
     const testRequirements = document.getElementById('test-requirements');
     const generateTestLoading = document.getElementById('generate-test-loading');
@@ -121,25 +239,500 @@ document.addEventListener('DOMContentLoaded', function() {
     const testCode = document.getElementById('test-code');
     const copyTestResult = document.getElementById('copy-test-result');
     const downloadTestResult = document.getElementById('download-test-result');
-    const scriptFileInput = document.getElementById('script-file');
     
-    // Handle file upload
-    if (scriptFileInput) {
-        scriptFileInput.addEventListener('change', function() {
-            const file = this.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    testScriptContent.value = e.target.result;
-                };
-                reader.readAsText(file);
+    // Elements for Execute Test
+    const executeTestForm = document.getElementById('execute-test-form');
+    const executeSelectScript = document.getElementById('execute-select-script');
+    const executeSelectTest = document.getElementById('execute-select-test');
+    const executeScriptContent = document.getElementById('execute-script-content');
+    const executeTestContent = document.getElementById('execute-test-content');
+    const executeTestLoading = document.getElementById('execute-test-loading');
+    const executeTestError = document.getElementById('execute-test-error');
+    const executeTestResult = document.getElementById('execute-test-result');
+    const testStatusBadge = document.getElementById('test-status-badge');
+    const testExecutionTime = document.getElementById('test-execution-time');
+    const testTimestamp = document.getElementById('test-timestamp');
+    const testOutput = document.getElementById('test-output');
+    
+    // Load scripts on page load
+    loadScripts();
+    
+    // Setup drag and drop for file upload
+    setupDragAndDrop('.border-dashed', testScriptFile, testScriptContent);
+    
+    // Handle script selection change
+    if (testSelectScript) {
+        testSelectScript.addEventListener('change', function() {
+            const scriptId = this.value;
+            
+            // Set the hidden script ID field
+            if (testScriptId) {
+                testScriptId.value = scriptId;
+            }
+            
+            if (scriptId) {
+                // Fetch the script details via API
+                fetch(`/api/coding/scripts/${scriptId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    credentials: 'same-origin'
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        // Update the script content textarea
+                        testScriptContent.value = result.script.content;
+                    } else {
+                        showToast('Failed to load script details', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching script:', error);
+                    showToast('Error loading script details', 'error');
+                });
+            } else {
+                // Clear the script content if no script selected
+                testScriptContent.value = '';
             }
         });
     }
     
-    // Drag and drop functionality
-    const dropZone = document.querySelector('.border-dashed');
-    if (dropZone) {
+    // Handle Execute Script selection change
+    if (executeSelectScript) {
+        executeSelectScript.addEventListener('change', function() {
+            const scriptId = this.value;
+            
+            if (scriptId) {
+                // Fetch the script details
+                fetch(`/api/coding/scripts/${scriptId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    credentials: 'same-origin'
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        // Update the script content textarea
+                        executeScriptContent.value = result.script.content;
+                        
+                        // Load test cases for this script
+                        loadTestCases(scriptId);
+                    } else {
+                        showToast('Failed to load script details', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching script:', error);
+                    showToast('Error loading script details', 'error');
+                });
+            } else {
+                // Clear the script content if no script selected
+                executeScriptContent.value = '';
+                executeTestContent.value = '';
+                
+                // Disable the test selection dropdown and submit button
+                executeSelectTest.innerHTML = '<option value="">-- Select a test case --</option>';
+                executeSelectTest.disabled = true;
+                executeTestForm.querySelector('button[type="submit"]').disabled = true;
+            }
+        });
+    }
+    
+    // Handle Execute Test Case selection change
+    if (executeSelectTest) {
+        executeSelectTest.addEventListener('change', function() {
+            const testCaseId = this.value;
+            
+            if (testCaseId) {
+                // Fetch the test case details
+                fetch(`/api/testing/test-cases/${testCaseId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    credentials: 'same-origin'
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        // Update the test content textarea
+                        executeTestContent.value = result.test_case.content;
+                        
+                        // Enable the submit button
+                        executeTestForm.querySelector('button[type="submit"]').disabled = false;
+                    } else {
+                        showToast('Failed to load test case details', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching test case:', error);
+                    showToast('Error loading test case details', 'error');
+                });
+            } else {
+                // Clear the test content if no test case selected
+                executeTestContent.value = '';
+                
+                // Disable the submit button
+                executeTestForm.querySelector('button[type="submit"]').disabled = true;
+            }
+        });
+    }
+    
+    // Generate Test Case Form Submit
+    if (generateTestForm) {
+        generateTestForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Get form data
+            const script_id = testScriptId.value;
+            const script_content = testScriptContent.value.trim();
+            const requirements = testRequirements.value.trim();
+            
+            if (!script_content) {
+                generateTestError.textContent = 'Please provide script content';
+                generateTestError.classList.remove('hidden');
+                return;
+            }
+            
+            // Hide previous results/errors
+            generateTestResult.classList.add('hidden');
+            generateTestError.classList.add('hidden');
+            
+            // Show loading indicator
+            generateTestLoading.classList.remove('hidden');
+            
+            // Prepare request data
+            const requestData = {};
+            
+            // If we have a script ID, use it
+            if (script_id) {
+                requestData.script_id = script_id;
+            }
+            
+            // Always include script content for flexibility
+            requestData.script_content = script_content;
+            
+            // Add requirements if provided
+            if (requirements) {
+                requestData.requirements = requirements;
+            }
+            
+            // Send request to API
+            fetch('/api/testing/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify(requestData),
+                credentials: 'same-origin'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(result => {
+                // Hide loading indicator
+                generateTestLoading.classList.add('hidden');
+                
+                if (result.success) {
+                    // Show the result
+                    generateTestResult.classList.remove('hidden');
+                    
+                    // Update the result elements
+                    testTitle.textContent = result.test_case.title || 'Generated Test Case';
+                    testCode.textContent = result.test_case.content;
+                    
+                    // Highlight the code
+                    if (typeof hljs !== 'undefined') {
+                        hljs.highlightElement(testCode);
+                    }
+                    
+                    // Scroll to the result
+                    generateTestResult.scrollIntoView({ behavior: 'smooth' });
+                    
+                    // Show success toast
+                    showToast('Test case generated successfully!', 'success');
+                    
+                    // Reload scripts and test cases after a small delay
+                    setTimeout(() => {
+                        loadScripts();
+                    }, 2000);
+                } else {
+                    // Show error message
+                    generateTestError.textContent = result.error || 'Failed to generate test case';
+                    generateTestError.classList.remove('hidden');
+                    showToast(result.error || 'Failed to generate test case', 'error');
+                }
+            })
+            .catch(error => {
+                // Hide loading indicator
+                generateTestLoading.classList.add('hidden');
+                
+                // Show error message
+                generateTestError.textContent = `Error: ${error.message}`;
+                generateTestError.classList.remove('hidden');
+                showToast(`Error: ${error.message}`, 'error');
+            });
+        });
+    }
+    
+    // Execute Test Case Form Submit
+    if (executeTestForm) {
+        executeTestForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Get form data
+            const testCaseId = executeSelectTest.value;
+            
+            if (!testCaseId) {
+                executeTestError.textContent = 'Please select a test case';
+                executeTestError.classList.remove('hidden');
+                return;
+            }
+            
+            // Hide previous results/errors
+            executeTestResult.classList.add('hidden');
+            executeTestError.classList.add('hidden');
+            
+            // Show loading indicator
+            executeTestLoading.classList.remove('hidden');
+            
+            // Disable submit button
+            const submitButton = executeTestForm.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Executing...';
+            
+            // Send request to API
+            fetch('/api/testing/execute', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({
+                    test_case_id: testCaseId
+                }),
+                credentials: 'same-origin'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(result => {
+                // Hide loading indicator
+                executeTestLoading.classList.add('hidden');
+                
+                // Reset submit button
+                submitButton.disabled = false;
+                submitButton.innerHTML = 'Execute Test Case';
+                
+                // Show the result
+                executeTestResult.classList.remove('hidden');
+                
+                // Update status badge
+                testStatusBadge.textContent = result.test_result.status || 'unknown';
+                testStatusBadge.className = 'test-status';
+                
+                // Add appropriate style based on status
+                if (result.test_result.status === 'passed') {
+                    testStatusBadge.classList.add('test-status-passed');
+                } else if (result.test_result.status === 'failed') {
+                    testStatusBadge.classList.add('test-status-failed');
+                } else {
+                    testStatusBadge.classList.add('test-status-error');
+                }
+                
+                // Update execution time and timestamp
+                if (result.test_result.execution_time) {
+                    testExecutionTime.textContent = `${result.test_result.execution_time.toFixed(2)}s`;
+                } else {
+                    testExecutionTime.textContent = 'N/A';
+                }
+                
+                testTimestamp.textContent = new Date(result.test_result.created_at).toLocaleString();
+                
+                // Update output
+                testOutput.textContent = result.test_result.output || 'No output';
+                
+                // Scroll to the result
+                executeTestResult.scrollIntoView({ behavior: 'smooth' });
+                
+                // Show success or failure toast
+                if (result.success) {
+                    showToast('Test executed successfully!', 'success');
+                } else {
+                    showToast('Test execution completed with issues', 'warning');
+                }
+            })
+            .catch(error => {
+                // Hide loading indicator
+                executeTestLoading.classList.add('hidden');
+                
+                // Reset submit button
+                submitButton.disabled = false;
+                submitButton.innerHTML = 'Execute Test Case';
+                
+                // Show error message
+                executeTestError.textContent = `Error: ${error.message}`;
+                executeTestError.classList.remove('hidden');
+                showToast(`Error: ${error.message}`, 'error');
+            });
+        });
+    }
+    
+    // Copy Button Handlers
+    if (copyTestResult) {
+        copyTestResult.addEventListener('click', function() {
+            navigator.clipboard.writeText(testCode.textContent)
+                .then(() => {
+                    showToast('Code copied to clipboard!', 'success');
+                })
+                .catch(err => {
+                    console.error('Failed to copy: ', err);
+                    showToast('Failed to copy to clipboard', 'error');
+                });
+        });
+    }
+    
+    // Download Button Handlers
+    if (downloadTestResult) {
+        downloadTestResult.addEventListener('click', function() {
+            const filename = 'test_case.py'; // Default filename
+            
+            // Create a blob and trigger download
+            const blob = new Blob([testCode.textContent], {type: 'text/plain'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showToast(`Downloaded ${filename}`, 'success');
+        });
+    }
+    
+    // Helper Functions
+    function loadScripts() {
+        fetch('/api/coding/scripts', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                // Update script selectors
+                updateScriptOptions(testSelectScript, result.scripts);
+                updateScriptOptions(executeSelectScript, result.scripts);
+            } else {
+                console.error('Failed to load scripts:', result.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading scripts:', error);
+        });
+    }
+    
+    function loadTestCases(scriptId) {
+        fetch(`/api/testing/test-cases?script_id=${scriptId}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                // Update test case selector
+                updateTestCaseOptions(executeSelectTest, result.test_cases);
+                
+                // Enable or disable the selector based on the number of test cases
+                executeSelectTest.disabled = result.test_cases.length === 0;
+                
+                // If no test cases found, show a message
+                if (result.test_cases.length === 0) {
+                    executeSelectTest.innerHTML = '<option value="">No test cases available</option>';
+                }
+            } else {
+                console.error('Failed to load test cases:', result.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading test cases:', error);
+        });
+    }
+    
+    function updateScriptOptions(selectElement, scripts) {
+        if (!selectElement) return;
+        
+        // Store current value to restore it if possible
+        const currentValue = selectElement.value;
+        
+        // Clear existing options (keeping the first default option)
+        selectElement.innerHTML = '<option value="">-- Select a script --</option>';
+        
+        // Add options for each script
+        scripts.forEach(script => {
+            const option = document.createElement('option');
+            option.value = script.id;
+            option.textContent = script.title;
+            selectElement.appendChild(option);
+        });
+        
+        // Restore selected value if it exists in the new options
+        if (currentValue && scripts.some(s => s.id == currentValue)) {
+            selectElement.value = currentValue;
+        }
+    }
+    
+    function updateTestCaseOptions(selectElement, testCases) {
+        if (!selectElement) return;
+        
+        // Store current value to restore it if possible
+        const currentValue = selectElement.value;
+        
+        // Clear existing options (keeping the first default option)
+        selectElement.innerHTML = '<option value="">-- Select a test case --</option>';
+        
+        // Add options for each test case
+        testCases.forEach(testCase => {
+            const option = document.createElement('option');
+            option.value = testCase.id;
+            option.textContent = testCase.title;
+            selectElement.appendChild(option);
+        });
+        
+        // Restore selected value if it exists in the new options
+        if (currentValue && testCases.some(tc => tc.id == currentValue)) {
+            selectElement.value = currentValue;
+        }
+    }
+    
+    function setupDragAndDrop(dropZoneSelector, fileInput, targetTextarea) {
+        const dropZone = document.querySelector(dropZoneSelector);
+        
+        if (!dropZone || !fileInput || !targetTextarea) return;
+        
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropZone.addEventListener(eventName, preventDefaults, false);
         });
@@ -165,128 +758,48 @@ document.addEventListener('DOMContentLoaded', function() {
             dropZone.classList.remove('border-indigo-300', 'bg-indigo-50');
         }
         
-        dropZone.addEventListener('drop', handleDrop, false);
-        
-        function handleDrop(e) {
-            const dt = e.dataTransfer;
-            const file = dt.files[0];
-            
+        dropZone.addEventListener('drop', function(e) {
+            const file = e.dataTransfer.files[0];
             if (file) {
+                // Update the file input
+                fileInput.files = e.dataTransfer.files;
+                
+                // Read the file and update the textarea
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    testScriptContent.value = e.target.result;
+                    targetTextarea.value = e.target.result;
                 };
                 reader.readAsText(file);
             }
+        }, false);
+        
+        // Handle file input change
+        fileInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    targetTextarea.value = e.target.result;
+                };
+                reader.readAsText(file);
+            }
+        });
+    }
+    
+    // Get CSRF token from the page
+    function getCsrfToken() {
+        return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    }
+    
+    // Toast notification function
+    function showToast(message, type = 'info') {
+        // Check if the showToast function exists in the global scope (possibly defined in base.html)
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, type);
+        } else {
+            // Fallback alert if the function doesn't exist
+            alert(message);
         }
-    }
-    
-    // Generate Test Case Form Submit
-    if (generateTestForm) {
-        generateTestForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            // Hide previous results and errors
-            generateTestResult.classList.add('hidden');
-            generateTestError.classList.add('hidden');
-            
-            // Show loading state
-            generateTestLoading.classList.remove('hidden');
-            
-            // Get form data
-            const script_content = testScriptContent.value;
-            const test_requirements = testRequirements.value;
-            
-            if (!script_content) {
-                generateTestError.textContent = 'Please provide a script to test';
-                generateTestError.classList.remove('hidden');
-                generateTestLoading.classList.add('hidden');
-                return;
-            }
-            
-            if (!test_requirements) {
-                generateTestError.textContent = 'Please provide test requirements';
-                generateTestError.classList.remove('hidden');
-                generateTestLoading.classList.add('hidden');
-                return;
-            }
-            
-            try {
-                // Create a temporary script ID since we're not using the database in this simplified version
-                const script_id = Date.now().toString();
-                
-                const result = await apiRequest('/api/testing/generate', 'POST', { 
-                    script_id, 
-                    script_content, 
-                    test_requirements 
-                });
-                
-                // Hide loading
-                generateTestLoading.classList.add('hidden');
-                
-                if (result.success) {
-                    // Update the UI with the generated test case
-                    testTitle.textContent = result.test_case.title;
-                    testCode.textContent = result.test_case.content;
-                    
-                    // Highlight the code
-                    if (typeof hljs !== 'undefined') {
-                        hljs.highlightElement(testCode);
-                    }
-                    
-                    // Show the result
-                    generateTestResult.classList.remove('hidden');
-                    
-                    // Scroll to the result
-                    generateTestResult.scrollIntoView({ behavior: 'smooth' });
-                    
-                    showToast('Test case generated successfully!', 'success');
-                } else {
-                    generateTestError.textContent = result.message || 'Failed to generate test case';
-                    generateTestError.classList.remove('hidden');
-                    showToast(result.message || 'Failed to generate test case', 'error');
-                }
-            } catch (error) {
-                // Hide loading
-                generateTestLoading.classList.add('hidden');
-                
-                // Show error
-                generateTestError.textContent = `Error: ${error.message}`;
-                generateTestError.classList.remove('hidden');
-                showToast(`Error: ${error.message}`, 'error');
-            }
-        });
-    }
-    
-    // Copy button event listener
-    if (copyTestResult) {
-        copyTestResult.addEventListener('click', function() {
-            const codeToCopy = testCode.textContent;
-            copyToClipboard(codeToCopy);
-        });
-    }
-    
-    // Download button event listener
-    if (downloadTestResult) {
-        downloadTestResult.addEventListener('click', function() {
-            const title = testTitle.textContent.trim() || 'test_case';
-            const filename = 'test_' + title.toLowerCase().replace(/\s+/g, '_') + '.py';
-            
-            const codeToCopy = testCode.textContent;
-            
-            // Create a blob and download link
-            const blob = new Blob([codeToCopy], {type: 'text/plain'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            showToast(`Downloaded ${filename}`, 'success');
-        });
     }
 });
 </script>
