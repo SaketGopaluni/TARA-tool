@@ -191,6 +191,7 @@ def generate_script():
 @app.route('/api/coding/debug', methods=['POST'])
 # @csrf.exempt
 def debug_script():
+    logger.info("Entering debug_script route...")
     if not coding_module:
         return jsonify({"success": False, "error": "Coding module not initialized."}), 500
 
