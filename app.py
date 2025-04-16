@@ -196,6 +196,8 @@ def debug_script():
 
     try:
         data = request.json
+        logger.info(f"Received data in debug_script: {data}") # <<< ADD LOGGING HERE
+        
         script_id = data.get('script_id')
         script_content = data.get('script_content') # Get current content from request
         error_log = data.get('error_log', '') # Get error log from request
@@ -278,6 +280,8 @@ def modify_script():
 
     try:
         data = request.json
+        logger.info(f"Received data in modify_script: {data}") # <<< ADD LOGGING HERE
+        
         script_id = data.get('script_id')
         modification_request = data.get('modification_request')
         script_content = data.get('script_content') # Get current content from request
