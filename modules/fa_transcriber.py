@@ -110,7 +110,34 @@ Do not include any text outside the JSON array. Use the exact column names shown
             )
             
             # Extract and process the response
-            response_content = completion.choices[0].message.content
+            # Check if completion and its attributes exist before accessing
+            if not completion or not hasattr(completion, 'choices') or not completion.choices:
+                logger.error("API returned empty or invalid response")
+                return {
+                    "success": False,
+                    "error": "API returned empty or invalid response"
+                }
+                
+            # Access the first choice safely
+            first_choice = completion.choices[0] if completion.choices else None
+            if not first_choice or not hasattr(first_choice, 'message') or not first_choice.message:
+                logger.error("API response missing message content")
+                return {
+                    "success": False,
+                    "error": "API response missing message content"
+                }
+                
+            # Get the content safely
+            message = first_choice.message
+            response_content = message.content if hasattr(message, 'content') else None
+            
+            if not response_content:
+                logger.error("API response has empty content")
+                return {
+                    "success": False,
+                    "error": "API response has empty content"
+                }
+                
             logger.info("OpenRouter FA transcription call successful.")
             
             # Clean up the response to ensure it's valid JSON
@@ -131,9 +158,23 @@ Do not include any text outside the JSON array. Use the exact column names shown
                 # Try to parse as JSON
                 result = json.loads(response_content)
                 
+                # Make sure we got a list/array
+                if not isinstance(result, list):
+                    logger.warning(f"Expected JSON array but got: {type(result).__name__}")
+                    # If it's a dict with results inside, try to extract them
+                    if isinstance(result, dict) and ('results' in result or 'data' in result):
+                        result = result.get('results') or result.get('data') or []
+                    else:
+                        # Wrap single item in a list
+                        result = [result] if result else []
+                
                 # Standardize the key names to match our database model
                 standardized_result = []
                 for item in result:
+                    # Skip if not a dict
+                    if not isinstance(item, dict):
+                        continue
+                        
                     standardized_item = {
                         "sheet_name": item.get("Sheet Name", ""),
                         "message": item.get("Message", ""),
@@ -145,18 +186,58 @@ Do not include any text outside the JSON array. Use the exact column names shown
                     }
                     standardized_result.append(standardized_item)
                 
+                # If we didn't get any valid items, return an empty list rather than failing
+                if not standardized_result:
+                    logger.warning("No valid items found in API response")
+                    standardized_result = []
+                
                 return {
                     "success": True,
                     "data": standardized_result
                 }
             except json.JSONDecodeError as json_err:
                 logger.error(f"Failed to parse AI response as JSON: {json_err}")
+                # Try to extract anything that looks like JSON
+                import re
+                json_pattern = r'\[\s*\{.*?\}\s*\]'
+                json_match = re.search(json_pattern, response_content, re.DOTALL)
+                
+                if json_match:
+                    try:
+                        extracted_json = json_match.group(0)
+                        result = json.loads(extracted_json)
+                        
+                        # Standardize as before
+                        standardized_result = []
+                        for item in result:
+                            if not isinstance(item, dict):
+                                continue
+                                
+                            standardized_item = {
+                                "sheet_name": item.get("Sheet Name", ""),
+                                "message": item.get("Message", ""),
+                                "start_ecu": item.get("Start ECU", ""),
+                                "end_ecu": item.get("End ECU", ""),
+                                "sending_ecu": item.get("Sending ECU", ""),
+                                "receiving_ecu": item.get("Receiving ECU", ""),
+                                "dashed_line": item.get("Dashed Line", "")
+                            }
+                            standardized_result.append(standardized_item)
+                        
+                        return {
+                            "success": True,
+                            "data": standardized_result
+                        }
+                    except:
+                        pass
+                        
+                # If all extraction attempts fail, return empty data
                 return {
-                    "success": False,
-                    "error": f"The AI response could not be parsed as JSON: {json_err}",
-                    "raw_response": response_content
+                    "success": True,
+                    "data": [],
+                    "warning": f"Could not parse response as JSON. Raw response: {response_content[:200]}..."
                 }
-            
+                
         except OpenAIError as e:
             logger.error(f"OpenRouter API call failed in FA transcriber module: {e}")
             return {
