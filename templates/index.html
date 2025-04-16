@@ -53,16 +53,20 @@
         margin-bottom: 1rem;
     }
     
+    .module-card-chat {
+        background: linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%);
+    }
+    
+    .module-card-fa {
+        background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+    }
+    
     .module-card-coding {
         background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
     }
     
     .module-card-testing {
         background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-    }
-    
-    .module-card-chat {
-        background: linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%);
     }
     
     .feature-item {
@@ -101,11 +105,11 @@
                         Your intelligent companion for Threat Analysis and Risk Assessment in automotive systems, focused on Electronic Control Units (ECUs) security.
                     </p>
                     <div class="flex flex-wrap gap-4">
-                        <a href="{{ url_for('coding') }}" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-white bg-opacity-20 hover:bg-opacity-30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white">
-                            <i class="fas fa-code mr-2"></i> Start Coding
-                        </a>
-                        <a href="{{ url_for('chat') }}" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-indigo-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <a href="{{ url_for('chat') }}" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-white bg-opacity-20 hover:bg-opacity-30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white">
                             <i class="fas fa-comment-alt mr-2"></i> Chat with TARA
+                        </a>
+                        <a href="{{ url_for('fa_transcriber') }}" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-indigo-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            <i class="fas fa-project-diagram mr-2"></i> Transcribe FA Diagram
                         </a>
                     </div>
                 </div>
@@ -131,7 +135,79 @@
                     TARA Assistant offers specialized modules designed to streamline and enhance the TARA process for automotive systems security.
                 </p>
                 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                    <!-- Chat Module Card -->
+                    <div class="card overflow-hidden">
+                        <div class="h-3 module-card-chat"></div>
+                        <div class="p-6">
+                            <div class="flex items-center mb-4">
+                                <div class="feature-icon bg-purple-100 text-purple-600">
+                                    <i class="fas fa-comment-alt text-xl"></i>
+                                </div>
+                                <h3 class="text-xl font-semibold text-gray-800 ml-4">Chat Module</h3>
+                            </div>
+                            <p class="text-gray-600 mb-4">Get expert assistance on automotive cybersecurity concepts and threat modeling.</p>
+                            <ul class="text-gray-600 mb-6 space-y-2">
+                                <li class="feature-item flex items-start">
+                                    <i class="fas fa-check-circle text-purple-500 mt-1 mr-2"></i>
+                                    <span>ECU explanations and details</span>
+                                </li>
+                                <li class="feature-item flex items-start">
+                                    <i class="fas fa-check-circle text-purple-500 mt-1 mr-2"></i>
+                                    <span>CIA-based damage scenarios with SFOP ratings</span>
+                                </li>
+                                <li class="feature-item flex items-start">
+                                    <i class="fas fa-check-circle text-purple-500 mt-1 mr-2"></i>
+                                    <span>STRIDE-based threat modeling</span>
+                                </li>
+                                <li class="feature-item flex items-start">
+                                    <i class="fas fa-check-circle text-purple-500 mt-1 mr-2"></i>
+                                    <span>Attack pattern generation</span>
+                                </li>
+                            </ul>
+                            <a href="{{ url_for('chat') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all">
+                                Go to Chat Module
+                                <i class="fas fa-arrow-right ml-2"></i>
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <!-- FA Transcriber Module Card -->
+                    <div class="card overflow-hidden">
+                        <div class="h-3 module-card-fa"></div>
+                        <div class="p-6">
+                            <div class="flex items-center mb-4">
+                                <div class="feature-icon bg-yellow-100 text-yellow-600">
+                                    <i class="fas fa-project-diagram text-xl"></i>
+                                </div>
+                                <h3 class="text-xl font-semibold text-gray-800 ml-4">FA Transcriber</h3>
+                            </div>
+                            <p class="text-gray-600 mb-4">Extract structured data from Functional Architecture diagrams for ECU analysis.</p>
+                            <ul class="text-gray-600 mb-6 space-y-2">
+                                <li class="feature-item flex items-start">
+                                    <i class="fas fa-check-circle text-yellow-500 mt-1 mr-2"></i>
+                                    <span>Image upload and analysis</span>
+                                </li>
+                                <li class="feature-item flex items-start">
+                                    <i class="fas fa-check-circle text-yellow-500 mt-1 mr-2"></i>
+                                    <span>ECU identification and relationships</span>
+                                </li>
+                                <li class="feature-item flex items-start">
+                                    <i class="fas fa-check-circle text-yellow-500 mt-1 mr-2"></i>
+                                    <span>Message flow extraction</span>
+                                </li>
+                                <li class="feature-item flex items-start">
+                                    <i class="fas fa-check-circle text-yellow-500 mt-1 mr-2"></i>
+                                    <span>Export results as CSV or JSON</span>
+                                </li>
+                            </ul>
+                            <a href="{{ url_for('fa_transcriber') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-all">
+                                Go to FA Transcriber
+                                <i class="fas fa-arrow-right ml-2"></i>
+                            </a>
+                        </div>
+                    </div>
+                    
                     <!-- Coding Module Card -->
                     <div class="card overflow-hidden">
                         <div class="h-3 module-card-coding"></div>
@@ -191,42 +267,6 @@
                             </ul>
                             <a href="{{ url_for('testing') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all">
                                 Go to Testing Module
-                                <i class="fas fa-arrow-right ml-2"></i>
-                            </a>
-                        </div>
-                    </div>
-                    
-                    <!-- Chat Module Card -->
-                    <div class="card overflow-hidden">
-                        <div class="h-3 module-card-chat"></div>
-                        <div class="p-6">
-                            <div class="flex items-center mb-4">
-                                <div class="feature-icon bg-purple-100 text-purple-600">
-                                    <i class="fas fa-comment-alt text-xl"></i>
-                                </div>
-                                <h3 class="text-xl font-semibold text-gray-800 ml-4">Chat Module</h3>
-                            </div>
-                            <p class="text-gray-600 mb-4">Get expert assistance on automotive cybersecurity concepts and threat modeling.</p>
-                            <ul class="text-gray-600 mb-6 space-y-2">
-                                <li class="feature-item flex items-start">
-                                    <i class="fas fa-check-circle text-purple-500 mt-1 mr-2"></i>
-                                    <span>ECU explanations and details</span>
-                                </li>
-                                <li class="feature-item flex items-start">
-                                    <i class="fas fa-check-circle text-purple-500 mt-1 mr-2"></i>
-                                    <span>CIA-based damage scenarios with SFOP ratings</span>
-                                </li>
-                                <li class="feature-item flex items-start">
-                                    <i class="fas fa-check-circle text-purple-500 mt-1 mr-2"></i>
-                                    <span>STRIDE-based threat modeling</span>
-                                </li>
-                                <li class="feature-item flex items-start">
-                                    <i class="fas fa-check-circle text-purple-500 mt-1 mr-2"></i>
-                                    <span>Attack pattern generation</span>
-                                </li>
-                            </ul>
-                            <a href="{{ url_for('chat') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all">
-                                Go to Chat Module
                                 <i class="fas fa-arrow-right ml-2"></i>
                             </a>
                         </div>
