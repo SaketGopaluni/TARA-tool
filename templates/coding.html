@@ -57,6 +57,45 @@
         background-color: #fee2e2;
         color: #b91c1c;
     }
+    
+    /* Make all code blocks visible */
+    pre code {
+        display: block !important;
+        visibility: visible !important;
+        min-height: 50px;
+    }
+    
+    /* Fix for empty result areas */
+    #debug-code, #modify-code {
+        min-height: 50px;
+        background-color: #1e293b;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        color: #e5e7eb;
+        font-family: monospace;
+        white-space: pre-wrap;
+    }
+    
+    /* Result container styling */
+    .result-container {
+        border: 1px solid #e5e7eb;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-top: 1.5rem;
+    }
+    
+    /* Diff line styling */
+    .diff-line-info {
+        background-color: #dbeafe;
+        color: #1e40af;
+        padding: 0.25rem 0.5rem;
+        margin: 0.25rem 0;
+    }
+    
+    .diff-line {
+        padding: 0.25rem 0.5rem;
+        margin: 0.25rem 0;
+    }
 </style>
 {% endblock %}
 
