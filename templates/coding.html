@@ -112,7 +112,7 @@
                 
                 <div id="generate-result" class="mt-8 hidden">
                     <div class="border-t border-gray-200 pt-4">
-                        <h4 class="text-lg font-medium text-gray-900 mb-2">Generated Script</h4>
+                        <h4 class="text-lg font-medium text-gray-900 mb-4">Generated Script</h4>
                         <div class="flex justify-between items-center mb-2">
                             <h5 id="generate-title" class="text-md font-medium text-gray-700"></h5>
                             <div>
@@ -177,6 +177,7 @@
                         <label for="error-log" class="block text-sm font-medium text-gray-700">Error Log / Description (Optional)</label>
                         <textarea id="error-log" name="error_log" rows="4" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Paste any error messages or describe the issues you're seeing"></textarea>
                     </div>
+                    <input type="hidden" id="debug-script-id" name="script_id" value="">
                     <div class="mt-5">
                         <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                             Debug Script
@@ -264,6 +265,7 @@
                         <label for="modification-request" class="block text-sm font-medium text-gray-700">Modification Request</label>
                         <textarea id="modification-request" name="modification_request" rows="4" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Describe the modifications you need (e.g., 'Add error handling for network failures' or 'Implement a new feature to filter by message ID')"></textarea>
                     </div>
+                    <input type="hidden" id="modify-script-id" name="script_id" value="">
                     <div class="mt-5">
                         <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                             Modify Script
