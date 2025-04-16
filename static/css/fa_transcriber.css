@@ -1,0 +1,163 @@
+/* Styles specific to the FA Transcriber module */
+
+.upload-container {
+    border: 2px dashed #d1d5db;
+    border-radius: 0.5rem;
+    padding: 2rem;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.upload-container:hover {
+    border-color: #f59e0b;
+    background-color: #fffbeb;
+}
+
+.upload-container.highlight {
+    border-color: #f59e0b;
+    background-color: #fffbeb;
+}
+
+.upload-icon {
+    display: block;
+    font-size: 2.5rem;
+    color: #6b7280;
+    margin-bottom: 1rem;
+}
+
+.preview-container {
+    margin-top: 2rem;
+    position: relative;
+}
+
+.image-preview {
+    max-width: 100%;
+    max-height: 400px;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    margin: 0 auto;
+    display: block;
+}
+
+.results-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1.5rem;
+    overflow-x: auto;
+}
+
+.results-table th,
+.results-table td {
+    border: 1px solid #e5e7eb;
+    padding: 0.75rem;
+    text-align: left;
+}
+
+.results-table th {
+    background-color: #f9fafb;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.results-table tr:nth-child(even) {
+    background-color: #f9fafb;
+}
+
+.results-table tr:hover {
+    background-color: #fffbeb;
+}
+
+.table-container {
+    max-height: 500px;
+    overflow-y: auto;
+    margin-top: 1.5rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+}
+
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 50;
+}
+
+.loading-spinner {
+    width: 4rem;
+    height: 4rem;
+    border: 0.25rem solid #e5e7eb;
+    border-top-color: #f59e0b;
+    border-radius: 50%;
+    animation: spinner 1s linear infinite;
+}
+
+@keyframes spinner {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.export-buttons {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    margin-top: 1rem;
+}
+
+.export-button {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+    background-color: #ffffff;
+    transition: all 0.2s ease;
+}
+
+.export-button:hover {
+    background-color: #f9fafb;
+    border-color: #d1d5db;
+}
+
+.export-button i {
+    margin-right: 0.5rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .upload-container {
+        padding: 1.5rem;
+    }
+    
+    .upload-icon {
+        font-size: 2rem;
+    }
+    
+    .table-container {
+        max-height: 300px;
+    }
+    
+    .results-table th,
+    .results-table td {
+        padding: 0.5rem;
+        font-size: 0.875rem;
+    }
+    
+    .export-buttons {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
