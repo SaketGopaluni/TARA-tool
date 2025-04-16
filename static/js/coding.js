@@ -62,8 +62,8 @@ function handleGenerateScriptFormSubmit(form, promptInput, languageSelect, resul
                 if(copyButton) copyButton.disabled = false; 
 
                 // --- Populate Debug and Modify Forms --- 
-                const debugScriptContentInput = document.getElementById('debug-script-content');
-                const modifyScriptContentInput = document.getElementById('modify-script-content');
+                const debugScriptContentInput = document.getElementById('debug-content'); 
+                const modifyScriptContentInput = document.getElementById('modify-content'); 
                 
                 if (debugScriptContentInput) {
                     debugScriptContentInput.value = scriptData.content;
@@ -371,19 +371,19 @@ document.addEventListener('DOMContentLoaded', function() {
         handleGenerateScriptFormSubmit(generateScriptForm, promptInput, languageSelect, resultContainer);
     }
     
-    const debugScriptForm = document.getElementById('debug-script-form');
+    const debugScriptForm = document.getElementById('debug-form');
     if (debugScriptForm) {
-        const scriptContentInput = document.getElementById('debug-script-content'); 
-        const errorLogInput = document.getElementById('debug-error-log'); 
-        const resultContainer = document.getElementById('debug-script-result');
+        const scriptContentInput = document.getElementById('debug-content'); 
+        const errorLogInput = document.getElementById('error-log'); 
+        const resultContainer = document.getElementById('debug-result');
         handleDebugScriptFormSubmit(debugScriptForm, scriptContentInput, errorLogInput, resultContainer);
     }
     
-    const modifyScriptForm = document.getElementById('modify-script-form');
+    const modifyScriptForm = document.getElementById('modify-form');
     if (modifyScriptForm) {
-        const scriptContentInput = document.getElementById('modify-script-content'); 
+        const scriptContentInput = document.getElementById('modify-content'); 
         const modificationRequestInput = document.getElementById('modification-request'); 
-        const resultContainer = document.getElementById('modify-script-result');
+        const resultContainer = document.getElementById('modify-result');
         handleModifyScriptFormSubmit(modifyScriptForm, scriptContentInput, modificationRequestInput, resultContainer);
     }
     
