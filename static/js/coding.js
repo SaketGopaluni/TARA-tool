@@ -61,6 +61,20 @@ function handleGenerateScriptFormSubmit(form, promptInput, languageSelect, resul
                 if(saveButton) saveButton.classList.remove('hidden'); 
                 if(copyButton) copyButton.disabled = false; 
 
+                // --- Populate Debug and Modify Forms --- 
+                const debugScriptContentInput = document.getElementById('debug-script-content');
+                const modifyScriptContentInput = document.getElementById('modify-script-content');
+                
+                if (debugScriptContentInput) {
+                    debugScriptContentInput.value = scriptData.content;
+                    debugScriptContentInput.dataset.scriptId = scriptData.id;
+                }
+                if (modifyScriptContentInput) {
+                    modifyScriptContentInput.value = scriptData.content;
+                    modifyScriptContentInput.dataset.scriptId = scriptData.id;
+                }
+                // --- End Population ---
+
                 showToast('Script generated successfully!', 'success');
 
             } else {
