@@ -99,23 +99,24 @@ def generateDiffHtml(original, modified):
         return "<div class='bg-yellow-100 p-2 rounded'>No changes made - code is identical.</div>"
     
     diff = difflib.unified_diff(
-        original.splitlines(keepends=True),
-        modified.splitlines(keepends=True),
+        original.splitlines(keepends=False),  
+        modified.splitlines(keepends=False),  
         n=3
     )
     
     html_diff = []
     for line in diff:
+        line_html = html.escape(line)
         if line.startswith('+'):
-            html_diff.append(f"<div class='bg-green-100 text-green-800'>{html.escape(line)}</div>")
+            html_diff.append(f"<div class='diff-line-added'>{line_html}</div>")
         elif line.startswith('-'):
-            html_diff.append(f"<div class='bg-red-100 text-red-800'>{html.escape(line)}</div>")
+            html_diff.append(f"<div class='diff-line-removed'>{line_html}</div>")
         elif line.startswith('@@'):
-            html_diff.append(f"<div class='bg-blue-100 text-blue-800'>{html.escape(line)}</div>")
+            html_diff.append(f"<div class='diff-line-info bg-blue-100 text-blue-800'>{line_html}</div>")
         else:
-            html_diff.append(f"<div>{html.escape(line)}</div>")
+            html_diff.append(f"<div class='diff-line'>{line_html}</div>")
     
-    return f"<div class='font-mono text-sm whitespace-pre'>{''.join(html_diff)}</div>"
+    return f"<div class='font-mono text-sm whitespace-pre-wrap'>{''.join(html_diff)}</div>"  
 
 # Remove old diff functions, use CodingModule.calculate_diff static method
 # def generate_diff_html(old_text, new_text): ...
@@ -262,6 +263,7 @@ def debug_script():
                     "analysis": analysis,
                     "explanation": analysis,  # Add this for frontend compatibility
                     "fixed_code": script_content, # Return original content if no changes
+                    "fixed_script": script_content, # Added for compatibility
                     "diff_html": "<div class='bg-yellow-100 p-2 rounded'>No changes needed - script appears to be functioning correctly.</div>",
                     "script_id": script_id,
                     "new_version": None # No new version created
@@ -300,6 +302,7 @@ def debug_script():
             "analysis": analysis,
             "explanation": analysis,  # Add this for frontend compatibility
             "fixed_code": fixed_code,
+            "fixed_script": fixed_code,  # Added for compatibility
             "diff_html": generateDiffHtml(script_content, fixed_code),  # Better diff display
             "script_id": script_id if script else None,
             "new_version": version_dict # Include new version info if created
@@ -386,6 +389,7 @@ def modify_script():
         return jsonify({
             "success": True,
             "modified_code": modified_code,
+            "modified_script": modified_code,  # Added for compatibility
             "explanation": explanation,
             "diff_html": generateDiffHtml(script_content, modified_code),  # Better diff display
             "script_id": script_id if script else None,
