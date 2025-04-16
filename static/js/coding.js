@@ -183,7 +183,7 @@ function handleDebugScriptFormSubmit(form, scriptContentInput, errorLogInput, re
         
         resultContainer.classList.remove('hidden');
         const explanationElement = resultContainer.querySelector('.debug-explanation');
-        const codeElement = resultContainer.querySelector('.debug-code'); 
+        const codeElement = resultContainer.querySelector('#debug-code'); 
         const saveButton = resultContainer.querySelector('.btn-save-debugged'); 
         const copyButton = resultContainer.querySelector('.btn-copy');
 
@@ -218,7 +218,8 @@ function handleDebugScriptFormSubmit(form, scriptContentInput, errorLogInput, re
                 const newVersion = result.new_version; // Get new version info (might be null)
                 
                 explanationElement.textContent = analysis || 'No analysis provided.';
-                codeElement.textContent = fixedCode;
+                codeElement.textContent = fixedCode; 
+                console.log('Setting debug code output:', fixedCode);
                 
                 hljs.highlightElement(codeElement);
                 
@@ -297,19 +298,16 @@ function handleModifyScriptFormSubmit(form, scriptContentInput, modificationRequ
         submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Modifying...';
         
         resultContainer.classList.remove('hidden');
-        const explanationElement = resultContainer.querySelector('.modify-explanation');
-        const codeElement = resultContainer.querySelector('.modify-code'); 
-        const diffElement = resultContainer.querySelector('.modify-diff'); 
+        const explanationElement = resultContainer.querySelector('#modify-explanation');
+        const diffElement = resultContainer.querySelector('#modify-diff');
+        const codeElement = resultContainer.querySelector('#modify-code'); 
         const saveButton = resultContainer.querySelector('.btn-save-modified'); 
         const copyButton = resultContainer.querySelector('.btn-copy');
 
-        explanationElement.textContent = 'Modification in progress...';
+        explanationElement.textContent = 'Modifying script...';
+        diffElement.innerHTML = 'Calculating changes...';
         codeElement.textContent = 'Please wait...';
-        diffElement.innerHTML = ''; 
-        hljs.highlightElement(codeElement); 
-        if(saveButton) saveButton.classList.add('hidden');
-        if(copyButton) copyButton.disabled = true;
-
+        
         try {
             const requestData = { 
                 script_id: scriptId, 
@@ -330,17 +328,19 @@ function handleModifyScriptFormSubmit(form, scriptContentInput, modificationRequ
             const result = await response.json(); 
 
             if (response.ok && result.success) {
-                const modifyData = result.modify_result; 
+                const explanation = result.explanation || 'Script modified successfully.';
+                const modifiedCode = result.modified_code;
+                const diffHtml = result.diff_html || generateSimpleDiff(scriptContent, modifiedCode);
+                const newVersion = result.new_version; // Get new version info (might be null)
                 
-                explanationElement.textContent = modifyData.explanation || 'No explanation provided.';
-                codeElement.textContent = modifyData.modified_code;
+                explanationElement.textContent = explanation;
+                diffElement.innerHTML = diffHtml;
+                codeElement.textContent = modifiedCode; 
+                console.log('Setting modified code output:', modifiedCode);
                 
                 hljs.highlightElement(codeElement);
 
-                const diffHtml = generateSimpleDiff(scriptContent, modifyData.modified_code);
-                diffElement.innerHTML = diffHtml;
-                
-                resultContainer.dataset.newVersionId = modifyData.id;
+                resultContainer.dataset.newVersionId = newVersion.id;
                 if(saveButton) saveButton.classList.remove('hidden');
                 if(copyButton) copyButton.disabled = false;
 
@@ -349,16 +349,16 @@ function handleModifyScriptFormSubmit(form, scriptContentInput, modificationRequ
             } else {
                 const errorMessage = result.error || 'Failed to modify script. Unknown error.';
                 explanationElement.textContent = 'Error';
+                diffElement.innerHTML = '';
                 codeElement.textContent = errorMessage;
-                diffElement.innerHTML = ''; 
                 showToast(errorMessage, 'error');
             }
             
         } catch (error) {
             console.error('Error modifying script:', error);
             explanationElement.textContent = 'Error';
+            diffElement.innerHTML = '';
             codeElement.textContent = `An error occurred: ${error.message}`;
-            diffElement.innerHTML = ''; 
             showToast('An error occurred while modifying the script.', 'error');
         } finally {
             submitButton.disabled = false;
