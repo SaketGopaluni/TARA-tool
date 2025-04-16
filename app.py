@@ -10,6 +10,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 import traceback
 # from functools import wraps # No longer needed for timed_response
+import html
 
 # Import refactored modules and database models
 from modules.chat import ChatModule
@@ -232,7 +233,9 @@ def debug_script():
                 return jsonify({
                     "success": True,
                     "analysis": analysis,
+                    "explanation": analysis,  # Add this for frontend compatibility
                     "fixed_code": script_content, # Return original content if no changes
+                    "diff_html": f"<pre>{html.escape(script_content)}</pre><pre>{html.escape(script_content)}</pre>",  # Simple diff
                     "script_id": script_id,
                     "new_version": None # No new version created
                 })
@@ -268,7 +271,9 @@ def debug_script():
         return jsonify({
             "success": True,
             "analysis": analysis,
+            "explanation": analysis,  # Add this for frontend compatibility
             "fixed_code": fixed_code,
+            "diff_html": f"<pre>{html.escape(script_content)}</pre><pre>{html.escape(fixed_code)}</pre>",  # Simple diff
             "script_id": script_id if script else None,
             "new_version": version_dict # Include new version info if created
         })
@@ -345,6 +350,8 @@ def modify_script():
         return jsonify({
             "success": True,
             "modified_code": modified_code,
+            "explanation": f"Script modified according to request: {modification_request[:100]}...",  # Add explanation
+            "diff_html": f"<pre>{html.escape(script_content)}</pre><pre>{html.escape(modified_code)}</pre>",  # Simple diff
             "script_id": script_id if script else None,
             "new_version": version_dict # Include new version info if created
         })
@@ -389,6 +396,7 @@ def diffcheck():
 
 # Testing API - Generate Test Case
 @app.route('/api/testing/generate', methods=['POST', 'GET', 'OPTIONS'])  # Add OPTIONS for preflight and GET for testing
+@csrf.exempt  # Exempt this route from CSRF protection
 def generate_test_case():
     logger.info(f"Accessed /api/testing/generate route with method: {request.method}")
     if request.method == 'OPTIONS':
