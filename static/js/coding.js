@@ -134,17 +134,20 @@ function handleDebugScriptFormSubmit(form, scriptContentInput, errorLogInput, re
         if(copyButton) copyButton.disabled = true;
 
         try {
+            const requestData = { 
+                script_id: scriptId, 
+                script_content: scriptContent, 
+                error_log: errorLog 
+            };
+            console.log('Sending requestData to /api/coding/debug:', requestData); 
+
             const response = await fetch('/api/coding/debug', { 
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCsrfToken() 
                 },
-                body: JSON.stringify({ 
-                    script_id: scriptId, 
-                    script_content: scriptContent, 
-                    error_log: errorLog 
-                })
+                body: JSON.stringify(requestData)
             });
             
             const result = await response.json(); 
@@ -233,17 +236,20 @@ function handleModifyScriptFormSubmit(form, scriptContentInput, modificationRequ
         if(copyButton) copyButton.disabled = true;
 
         try {
+            const requestData = { 
+                script_id: scriptId, 
+                script_content: scriptContent,
+                modification_request: modificationRequest 
+            };
+            console.log('Sending requestData to /api/coding/modify:', requestData); 
+            
             const response = await fetch('/api/coding/modify', { 
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCsrfToken() 
                 },
-                body: JSON.stringify({ 
-                    script_id: scriptId, 
-                    script_content: scriptContent,
-                    modification_request: modificationRequest 
-                })
+                body: JSON.stringify(requestData)
             });
             
             const result = await response.json(); 
