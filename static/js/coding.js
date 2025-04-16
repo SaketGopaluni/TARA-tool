@@ -136,14 +136,25 @@ function handleDebugScriptFormSubmit(form, scriptContentInput, errorLogInput, re
             const result = await response.json(); 
 
             if (response.ok && result.success) {
-                const debugData = result.debug_result; 
+                const analysis = result.analysis; 
+                const fixedCode = result.fixed_code;
+                const newVersion = result.new_version; // Get new version info (might be null)
                 
-                explanationElement.textContent = debugData.explanation || 'No explanation provided.';
-                codeElement.textContent = debugData.fixed_code;
+                explanationElement.textContent = analysis || 'No analysis provided.';
+                codeElement.textContent = fixedCode;
                 
                 hljs.highlightElement(codeElement);
                 
-                resultContainer.dataset.newVersionId = debugData.id;
+                // Update dataset if a new version was created
+                if (newVersion) {
+                    resultContainer.dataset.newVersionId = newVersion.id; 
+                    // Potentially update the main script ID reference if needed
+                    // scriptContentInput.dataset.scriptId = result.script_id; // Ensure scriptId remains consistent
+                } else {
+                    // Clear old version ID if no new version was created
+                    delete resultContainer.dataset.newVersionId;
+                }
+                
                 if(saveButton) saveButton.classList.remove('hidden');
                 if(copyButton) copyButton.disabled = false;
 
