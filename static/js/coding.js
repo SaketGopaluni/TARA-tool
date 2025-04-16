@@ -101,10 +101,32 @@ function handleDebugScriptFormSubmit(form, scriptContentInput, errorLogInput, re
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
         
-        const scriptContent = scriptContentInput.value.trim();
-        const errorLog = errorLogInput.value.trim(); 
-        const scriptId = scriptContentInput.dataset.scriptId; 
-        console.log('Retrieved scriptId from dataset:', scriptId); 
+        const scriptContentInput = document.getElementById('debug-content'); 
+        console.log('Debug scriptContentInput element:', scriptContentInput); 
+        const errorLogInput = document.getElementById('error-log');       
+        console.log('Debug errorLogInput element:', errorLogInput);       
+
+        if (!scriptContentInput) {
+            console.error('Could not find element with ID "debug-content"');
+            showToast('Internal Error: Debug form elements missing. Cannot find content area.', 'error');
+            // Re-enable button if needed
+            const submitButton = form.querySelector('button[type="submit"]');
+            if(submitButton) { submitButton.disabled = false; submitButton.innerHTML = 'Debug Script'; }
+            return;
+        }
+        if (!errorLogInput) {
+            console.error('Could not find element with ID "error-log"');
+            showToast('Internal Error: Debug form elements missing. Cannot find error log area.', 'error');
+            // Re-enable button if needed
+            const submitButton = form.querySelector('button[type="submit"]');
+            if(submitButton) { submitButton.disabled = false; submitButton.innerHTML = 'Debug Script'; }
+            return;
+        }
+
+        const scriptContent = scriptContentInput.value.trim();            
+        const errorLog = errorLogInput.value.trim();                      
+        const scriptId = scriptContentInput.dataset.scriptId;             
+        console.log('Retrieved scriptId from dataset:', scriptId);        
 
         if (!scriptId) {
             console.error('Script ID is missing from the debug form dataset!');
