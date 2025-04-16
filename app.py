@@ -1,16 +1,15 @@
 import os
 import tempfile
-import uuid # Add the missing import
+import uuid
 import json
 import re
-import logging # Add logging import
-from datetime import datetime # Add missing datetime import
+import logging
+from datetime import datetime
 from flask import Flask, render_template, request, jsonify, session, Response, make_response
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 import traceback
-# from functools import wraps # No longer needed for timed_response
 import html
 import difflib
 
@@ -18,8 +17,10 @@ import difflib
 from modules.chat import ChatModule
 from modules.testing import TestingModule
 from modules.coding import CodingModule
+from modules.fa_transcriber import FATranscriberModule  # Import the new module
 from database import db, ChatSession, ChatMessage, Script, ScriptVersion, TestCase, TestResult
-from config import config # Import the config dictionary
+from database import Image, FATranscription, FATranscriptionItem  # Import new models
+from config import config
 
 # Load environment variables
 load_dotenv()
@@ -28,8 +29,8 @@ load_dotenv()
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
 # Load configuration based on environment variable
-config_name = os.environ.get('FLASK_CONFIG') or 'default' # Use 'default' (development) if FLASK_CONFIG not set
-app.config.from_object(config[config_name]) # Load config from dictionary
+config_name = os.environ.get('FLASK_CONFIG') or 'default'
+app.config.from_object(config[config_name])
 
 # Configure logging based on Flask debug setting
 if app.config['DEBUG']:
@@ -39,7 +40,6 @@ else:
 logger = logging.getLogger(__name__)
 
 # Setup database
-# Database URI is now loaded via app.config from get_config()
 db.init_app(app)
 
 # Setup CSRF protection
@@ -48,24 +48,18 @@ csrf = CSRFProtect(app)
 # Setup proxy fix for Vercel
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-# REMOVE OLD DeepSeek Client Initialization
-# try:
-#     from openai import OpenAI
-#     openai_client = OpenAI(
-#         api_key=app.config['DEEPSEEK_API_KEY'], 
-#         base_url="https://api.deepseek.com",
-#         timeout=5.0  # Set a 5 second timeout to ensure we don't hit Vercel's 10s limit
-#     )
-# except ImportError:
-#     app.logger.error("OpenAI package not installed. Please run 'pip install openai'")
-#     openai_client = None
-
 # Initialize the refactored modules with the app config
-# These instances will handle the AI interactions
 try:
-    # Pass the whole config dictionary (or app.config directly)
-    logger.debug(f"Attempting to initialize modules with config: {app.config}") # Log the config object
-    logger.info(f"Found OPENROUTER_API_KEY in app.config: {'*' * 5 + app.config.get('OPENROUTER_API_KEY')[-4:] if app.config.get('OPENROUTER_API_KEY') else 'Not Found'}") # Log if key exists (partially masked)
+    logger.debug(f"Attempting to initialize modules with config: {app.config}")
+    logger.info(f"Found OPENROUTER_API_KEY in app.config: {'*' * 5 + app.config.get('OPENROUTER_API_KEY')[-4:] if app.config.get('OPENROUTER_API_KEY') else 'Not Found'}")
+    
+    logger.info("Initializing ChatModule...")
+    chat_module = ChatModule(app.config)
+    logger.info("ChatModule initialized successfully.")
+    
+    logger.info("Initializing FATranscriberModule...")
+    fa_transcriber_module = FATranscriberModule(app.config)
+    logger.info("FATranscriberModule initialized successfully.")
     
     logger.info("Initializing CodingModule...")
     coding_module = CodingModule(app.config)
@@ -75,22 +69,18 @@ try:
     testing_module = TestingModule(app.config)
     logger.info("TestingModule initialized successfully.")
     
-    logger.info("Initializing ChatModule...")
-    chat_module = ChatModule(app.config)
-    logger.info("ChatModule initialized successfully.")
-    
 except ValueError as e:
-    logger.error(f"ValueError during module initialization: {e}. Ensure OPENROUTER_API_KEY is set.", exc_info=True) # Log full traceback
-    # Depending on the app's requirements, you might exit or run in a limited mode.
-    # For now, we'll log the error and let Flask continue, but API calls will fail.
+    logger.error(f"ValueError during module initialization: {e}. Ensure OPENROUTER_API_KEY is set.", exc_info=True)
+    chat_module = None
+    fa_transcriber_module = None
     coding_module = None
     testing_module = None
-    chat_module = None
 except Exception as e:
-    logger.error(f"Unexpected Exception during module initialization: {e}", exc_info=True) # Log full traceback
+    logger.error(f"Unexpected Exception during module initialization: {e}", exc_info=True)
+    chat_module = None
+    fa_transcriber_module = None
     coding_module = None
     testing_module = None
-    chat_module = None
 
 # Helper function to generate HTML diff
 def generateDiffHtml(original, modified):
@@ -116,22 +106,26 @@ def generateDiffHtml(original, modified):
         else:
             html_diff.append(f"<div class='diff-line'>{line_html}</div>")
     
-    return f"<div class='font-mono text-sm whitespace-pre-wrap'>{''.join(html_diff)}</div>"  
-
-# Remove old diff functions, use CodingModule.calculate_diff static method
-# def generate_diff_html(old_text, new_text): ...
-# def generate_simple_diff_html(old_text, new_text): ...
-
-# Remove old Response time decorator
-# def timed_response(f): ...
-
-# Remove old streaming helper
-# def stream_deepseek_response(response_stream): ...
+    return f"<div class='font-mono text-sm whitespace-pre-wrap'>{''.join(html_diff)}</div>"
 
 # Home route
 @app.route('/')
 def index():
     return render_template('index.html')
+
+# Chat route
+@app.route('/chat')
+def chat():
+    # Initialize session ID if not present
+    if 'chat_session_id' not in session:
+        session['chat_session_id'] = str(uuid.uuid4())
+    
+    return render_template('chat.html')
+
+# FA Transcriber route
+@app.route('/fa-transcriber')
+def fa_transcriber():
+    return render_template('fa_transcriber.html')
 
 # Coding route
 @app.route('/coding')
@@ -143,16 +137,269 @@ def coding():
 def testing():
     return render_template('testing.html')
 
-# Chat route
-@app.route('/chat')
-def chat():
-    # Initialize session ID if not present
-    if 'chat_session_id' not in session:
-        session['chat_session_id'] = str(uuid.uuid4())
-    
-    return render_template('chat.html')
-
 # API Routes
+
+# Chat API - Send Message
+@app.route('/api/chat/send', methods=['POST'])
+def send_chat_message():
+    if not chat_module:
+         return jsonify({"success": False, "error": "Chat module not initialized."}), 500
+
+    try:
+        data = request.json
+        message = data.get('message')
+        session_id = session.get('chat_session_id') # Use Flask session ID
+
+        if not message:
+            return jsonify({"success": False, "error": "Missing message"}), 400
+        if not session_id:
+            # Should not happen if chat() route was hit first, but handle defensively
+            logger.warning("Chat session ID not found in Flask session for /api/chat/send")
+            return jsonify({"success": False, "error": "Chat session not found. Please refresh the chat page."}), 400
+            
+        # --- Database Interaction: Get/Create Session and History --- 
+        logger.debug(f"Processing chat message for session ID: {session_id}")
+        # Get or create DB session record linked to the Flask session ID
+        chat_db_session = ChatSession.query.filter_by(session_id=session_id).first()
+        if not chat_db_session:
+            logger.info(f"Creating new DB record for chat session: {session_id}")
+            chat_db_session = ChatSession(session_id=session_id)
+            db.session.add(chat_db_session)
+            # We need the ID, so commit here
+            db.session.commit() 
+            logger.info(f"Created ChatSession DB ID: {chat_db_session.id}")
+        else:
+             logger.debug(f"Found existing ChatSession DB ID: {chat_db_session.id}")
+
+        # Save user message to DB *before* calling the model
+        user_msg = ChatMessage(session_id=chat_db_session.id, role='user', content=message)
+        db.session.add(user_msg)
+        db.session.commit()
+        logger.debug(f"Saved user ChatMessage ID: {user_msg.id}")
+
+        # Get history from DB for context (make sure it's ordered correctly)
+        db_history = ChatMessage.query.filter_by(session_id=chat_db_session.id).order_by(ChatMessage.created_at.asc()).all()
+        # Format for the model: list of {'role': str, 'content': str}
+        history_for_model = [{'role': msg.role, 'content': msg.content} for msg in db_history]
+
+        # Call refactored chat method (non-streaming)
+        logger.debug(f"Calling chat_module.get_response for session ID: {session_id}")
+        result = chat_module.get_response(message, chat_history=history_for_model)
+
+        if not result.get('success'):
+            logger.error(f"Module Error in send_chat_message: {result.get('error')}")
+            # Optionally save an error message to history?
+            # error_msg = ChatMessage(session_id=chat_db_session.id, role='assistant', content=f"Error: {result.get('error')}")
+            # db.session.add(error_msg)
+            # db.session.commit()
+            return jsonify({"success": False, "error": result.get('error', 'Unknown chat error')}), 500
+
+        assistant_response = result.get('response')
+
+        # --- Database Interaction: Save Assistant Response --- 
+        logger.debug(f"Saving assistant response for session ID: {session_id}")
+        assistant_msg = ChatMessage(session_id=chat_db_session.id, role='assistant', content=assistant_response)
+        db.session.add(assistant_msg)
+        db.session.commit()
+        logger.debug(f"Saved assistant ChatMessage ID: {assistant_msg.id}")
+
+        return jsonify({
+            "success": True, 
+            "response": assistant_response,
+            "session_id": session_id # Return session ID used
+        })
+
+    except Exception as e:
+        logger.error(f"Error in send_chat_message API: {e}")
+        logger.error(traceback.format_exc())
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e), "message": "Failed to send message"}), 500
+
+# Chat API - Get History
+@app.route('/api/chat/history', methods=['GET'])
+def get_chat_history():
+    session_id = session.get('chat_session_id') # Get Flask session ID
+    if not session_id:
+        logger.warning("Chat session ID not found in Flask session for /api/chat/history")
+        return jsonify({"success": False, "error": "No active chat session found in your browser session."}), 400
+
+    # Find the corresponding ChatSession in the database
+    chat_db_session = ChatSession.query.filter_by(session_id=session_id).first()
+    if not chat_db_session:
+        logger.info(f"No chat history found in DB for session ID: {session_id}")
+        # It's not an error if there's no history yet, return empty list
+        return jsonify({"success": True, "messages": [], "session_id": session_id}), 200 
+
+    try:
+        logger.debug(f"Fetching chat history for DB session ID: {chat_db_session.id}")
+        # Fetch associated messages ordered by creation time
+        messages = ChatMessage.query.filter_by(session_id=chat_db_session.id).order_by(ChatMessage.created_at.asc()).all()
+        return jsonify({
+            "success": True,
+            "messages": [msg.to_dict() for msg in messages],
+            "session_id": session_id # Return the original Flask session ID
+        })
+    except Exception as e:
+        logger.error(f"Error fetching chat history for session {session_id} (DB ID: {chat_db_session.id}): {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e), "message": "Failed to get chat history"}), 500
+
+# Chat API - Clear History
+@app.route('/api/chat/clear', methods=['POST'])
+def clear_chat_history():
+    session_id = session.get('chat_session_id') # Get Flask session ID
+    if not session_id:
+        logger.warning("Chat session ID not found in Flask session for /api/chat/clear")
+        return jsonify({"success": False, "error": "No active chat session found in your browser session."}), 400
+
+    # Find the corresponding ChatSession in the database
+    chat_db_session = ChatSession.query.filter_by(session_id=session_id).first()
+    if not chat_db_session:
+        logger.info(f"No chat history to clear in DB for session ID: {session_id}")
+        # Nothing to clear, return success
+        return jsonify({"success": True, "message": "No history to clear"}), 200 
+
+    try:
+        logger.info(f"Clearing chat history for session ID: {session_id} (DB ID: {chat_db_session.id})")
+        # Delete associated messages
+        num_deleted = ChatMessage.query.filter_by(session_id=chat_db_session.id).delete()
+        # Optional: Delete the ChatSession row itself? 
+        # db.session.delete(chat_db_session) 
+        db.session.commit()
+        logger.info(f"Cleared {num_deleted} messages for chat session {session_id}")
+        # Optional: Remove from Flask session too? 
+        # session.pop('chat_session_id', None)
+        return jsonify({"success": True, "message": "Chat history cleared"})
+    except Exception as e:
+        logger.error(f"Error clearing chat history for session {session_id} (DB ID: {chat_db_session.id}): {e}")
+        logger.error(traceback.format_exc())
+        db.session.rollback() # Rollback in case of error
+        return jsonify({"success": False, "error": str(e), "message": "Failed to clear chat history"}), 500
+
+# FA Transcriber API - Upload Image and Transcribe
+@app.route('/api/fa-transcriber/transcribe', methods=['POST'])
+def transcribe_image():
+    if not fa_transcriber_module:
+        return jsonify({"success": False, "error": "FA Transcriber module not initialized. Check API key."}), 500
+        
+    if 'image' not in request.files:
+        return jsonify({"success": False, "error": "No image file provided"}), 400
+        
+    image_file = request.files['image']
+    if image_file.filename == '':
+        return jsonify({"success": False, "error": "No selected image file"}), 400
+        
+    # Check file type
+    allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'}
+    if '.' not in image_file.filename or \
+       image_file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
+        return jsonify({
+            "success": False, 
+            "error": "Invalid file type. Allowed types: png, jpg, jpeg, gif, bmp, webp"
+        }), 400
+    
+    try:
+        # Read the image file
+        image_data = image_file.read()
+        content_type = image_file.content_type or 'image/jpeg'  # Fallback if content_type not available
+        
+        # Save the image to the database
+        new_image = Image(
+            filename=image_file.filename,
+            data=image_data,
+            content_type=content_type
+        )
+        db.session.add(new_image)
+        db.session.commit()
+        logger.info(f"Saved new image with ID: {new_image.id}")
+        
+        # Transcribe the image
+        result = fa_transcriber_module.transcribe_image(image_data, image_file.filename, content_type)
+        
+        if not result["success"]:
+            logger.error(f"Failed to transcribe image: {result.get('error')}")
+            return jsonify(result), 500
+        
+        # Create a transcription record
+        transcription = FATranscription(image_id=new_image.id)
+        db.session.add(transcription)
+        db.session.commit()
+        logger.info(f"Created FATranscription with ID: {transcription.id}")
+        
+        # Create transcription items
+        items = []
+        for item_data in result["data"]:
+            transcription_item = FATranscriptionItem(
+                transcription_id=transcription.id,
+                sheet_name=item_data.get("sheet_name"),
+                message=item_data.get("message"),
+                start_ecu=item_data.get("start_ecu"),
+                end_ecu=item_data.get("end_ecu"),
+                sending_ecu=item_data.get("sending_ecu"),
+                receiving_ecu=item_data.get("receiving_ecu"),
+                dashed_line=item_data.get("dashed_line")
+            )
+            db.session.add(transcription_item)
+            items.append(transcription_item)
+        
+        db.session.commit()
+        logger.info(f"Created {len(items)} FATranscriptionItems for transcription ID: {transcription.id}")
+        
+        # Return the transcription data
+        return jsonify({
+            "success": True,
+            "image_id": new_image.id,
+            "transcription_id": transcription.id,
+            "items": [item.to_dict() for item in items]
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in transcribe_image API: {e}")
+        logger.error(traceback.format_exc())
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# FA Transcriber API - Get Transcription
+@app.route('/api/fa-transcriber/transcriptions/<int:transcription_id>', methods=['GET'])
+def get_transcription(transcription_id):
+    try:
+        transcription = FATranscription.query.get(transcription_id)
+        
+        if not transcription:
+            return jsonify({"success": False, "error": "Transcription not found"}), 404
+            
+        items = FATranscriptionItem.query.filter_by(transcription_id=transcription.id).all()
+        
+        return jsonify({
+            "success": True,
+            "transcription_id": transcription.id,
+            "image_id": transcription.image_id,
+            "processed_at": transcription.processed_at.isoformat(),
+            "items": [item.to_dict() for item in items]
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_transcription API: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# FA Transcriber API - Get Image
+@app.route('/api/fa-transcriber/images/<int:image_id>', methods=['GET'])
+def get_image(image_id):
+    try:
+        image = Image.query.get(image_id)
+        
+        if not image:
+            return jsonify({"success": False, "error": "Image not found"}), 404
+            
+        response = make_response(image.data)
+        response.headers.set('Content-Type', image.content_type)
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in get_image API: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # Coding API - Generate Script
 @app.route('/api/coding/generate', methods=['POST'])
@@ -435,115 +682,175 @@ def diffcheck():
         return jsonify({"success": False, "error": str(e), "message": "Failed to generate diff"}), 500
 
 # Testing API - Generate Test Case
-@app.route('/api/testing/generate', methods=['POST'])
-# @csrf.exempt
+@app.route('/api/testing/generate', methods=['POST', 'GET', 'OPTIONS'])  # Add OPTIONS for preflight and GET for testing
 def generate_test_case():
+    logger.info(f"Accessed /api/testing/generate route with method: {request.method}")
+    if request.method == 'OPTIONS':
+        # Handle preflight requests for CORS if needed
+        resp = app.make_default_options_response()
+        return resp
+        
     if not testing_module:
-        return jsonify({"success": False, "error": "Testing module not initialized. Check API key."}), 500
-    
+         return jsonify({"success": False, "error": "Testing module not initialized."}), 500
+         
     try:
         data = request.json
-        
-        # Get script ID and content from the request
+        logger.info(f"Received data in generate_test_case: {data}")
         script_id = data.get('script_id')
-        script_content = data.get('script_content')
-        requirements = data.get('requirements', '')
+        # Fetch script content and language from DB based on script_id
+        # script_content = data.get('script_content') # No longer needed in request
+        # language = data.get('language') # No longer needed in request
+        requirements = data.get('requirements', 'Generate standard unit tests.') # Optional requirements
+
+        if not script_id:
+            logger.error(f"Missing script_id: {script_id}")
+            return jsonify({"success": False, "error": "Missing script_id"}), 400
+
+        script = Script.query.get(script_id)
+        if not script:
+            logger.error(f"Script not found for ID: {script_id}")
+            return jsonify({"success": False, "error": "Script not found"}), 404
         
-        if not script_content:
-            return jsonify({"success": False, "error": "Missing script_content"}), 400
-        
-        # Call the testing module to generate a test case
-        try:
-            test_case = testing_module.generate_test_case(script_content, requirements)
-        except Exception as e:
-            logger.error(f"Error in testing module: {str(e)}")
-            return jsonify({"success": False, "error": f"Error generating test case: {str(e)}"}), 500
-        
-        # Save the test case to the database if a script ID was provided
-        if script_id:
-            script = Script.query.get(script_id)
-            if script:
-                new_test_case = TestCase(
-                    script_id=script.id,
-                    title=f"Test for {script.title or 'Untitled Script'}",
-                    content=test_case,
-                    created_at=datetime.utcnow()
-                )
-                db.session.add(new_test_case)
-                db.session.commit()
-                
-                return jsonify({
-                    "success": True,
-                    "test_case": new_test_case.to_dict(),
-                    "message": "Test case generated and saved successfully."
-                })
-            else:
-                logger.warning(f"Script ID {script_id} not found, returning generated test case without saving")
-                
-        # If no script ID or script not found, return the test case without saving
+        script_content = script.content
+        language = script.language
+
+        if not script_content or not language:
+             logger.error(f"Missing script content or language for script ID: {script_id}")
+             return jsonify({"success": False, "error": "Script content or language missing in database for the selected script."}), 400
+
+        logger.debug(f"Calling testing_module.generate_test_cases for script ID: {script_id} ({language})")
+        # Call refactored generate method (expects script content and language)
+        result = testing_module.generate_test_cases(script_content, language, requirements)
+
+        if not result.get('success'):
+            logger.error(f"Module Error in generate_test_case: {result.get('error')}")
+            return jsonify({"success": False, "error": result.get('error', 'Unknown error during test generation')}), 500
+
+        generated_tests = result.get('test_cases') # This is the generated code string
+
+        # --- Database Interaction --- 
+        logger.debug(f"Saving generated test case for script ID: {script_id}")
+        new_test_case = TestCase(
+            script_id=script.id,
+            title=f"Tests for {script.title[:50]}", # Truncate title if long
+            content=generated_tests,
+            language=language, # Store the language used for generation
+            requirements=requirements
+        )
+        db.session.add(new_test_case)
+        db.session.commit()
+        logger.info(f"Created new TestCase ID: {new_test_case.id} for Script ID: {script.id}")
+
         return jsonify({
-            "success": True,
-            "test_case": {
-                "id": None,
-                "title": "Generated Test Case (Not Saved)",
-                "content": test_case,
-                "created_at": datetime.utcnow().isoformat()
-            },
-            "message": "Test case generated successfully (not saved to database)."
-        })
-        
+            "success": True, 
+            "test_case": new_test_case.to_dict() # Return saved test case data
+        }), 201
+
     except Exception as e:
         logger.error(f"Error in generate_test_case API: {e}")
         logger.error(traceback.format_exc())
         db.session.rollback()
         return jsonify({"success": False, "error": str(e), "message": "Failed to generate test case"}), 500
 
-# Testing API - Get Test Cases
-@app.route('/api/testing/test-cases', methods=['GET'])
-def get_test_cases():
-    try:
-        script_id = request.args.get('script_id')
-        
-        if not script_id:
-            return jsonify({"success": False, "error": "Missing script_id parameter"}), 400
-            
-        # Check if script exists
-        script = Script.query.get(script_id)
-        if not script:
-            return jsonify({"success": False, "error": "Script not found"}), 404
-            
-        # Get test cases for the script
-        test_cases = TestCase.query.filter_by(script_id=script_id).order_by(TestCase.created_at.desc()).all()
-        
-        return jsonify({
-            "success": True,
-            "test_cases": [test_case.to_dict() for test_case in test_cases],
-            "script_id": script_id
-        })
-        
-    except Exception as e:
-        logger.error(f"Error in get_test_cases API: {e}")
-        logger.error(traceback.format_exc())
-        return jsonify({"success": False, "error": str(e), "message": "Failed to get test cases"}), 500
+# Testing API - Execute Test Case
+@app.route('/api/testing/execute', methods=['POST'])
+def execute_test_case():
+    if not testing_module:
+         return jsonify({"success": False, "error": "Testing module not initialized."}), 500
 
-# Add missing route for getting a specific test case
-@app.route('/api/testing/test-cases/<int:test_case_id>', methods=['GET'])
-def get_test_case(test_case_id):
     try:
+        data = request.json
+        test_case_id = data.get('test_case_id')
+        # Script content, test content, and language will be fetched from DB
+
+        if not test_case_id:
+            return jsonify({"success": False, "error": "Missing test_case_id"}), 400
+
         test_case = TestCase.query.get(test_case_id)
-        
         if not test_case:
-            return jsonify({"success": False, "error": "Test case not found"}), 404
+            return jsonify({"success": False, "error": "Test Case not found"}), 404
             
+        script = Script.query.get(test_case.script_id)
+        if not script:
+            return jsonify({"success": False, "error": "Associated Script not found"}), 404
+            
+        script_content = script.content
+        test_content = test_case.content
+        # Use language from test case or script as fallback
+        language = test_case.language if test_case.language else script.language 
+
+        if not script_content or not test_content or not language:
+             return jsonify({"success": False, "error": "Missing content or language for script or test case."}), 400
+
+        logger.debug(f"Calling testing_module.execute_test for TestCase ID: {test_case_id} ({language})")
+        # Call the execute_test method from the module
+        # This method handles temporary files and subprocess execution
+        # It returns a dict: {'success': bool, 'results': str, 'error': str (optional)} 
+        result = testing_module.execute_test(script_content, test_content, language)
+
+        # --- Database Interaction --- 
+        logger.debug(f"Saving test result for TestCase ID: {test_case_id}")
+        # Determine status based on success flag and presence of error key
+        if result.get('success'):
+            status = "passed"
+            output = result.get('results', 'Execution successful, no output captured.')
+        elif 'error' in result:
+             status = "error"
+             output = result.get('error', 'An unknown execution error occurred.')
+        else:
+             status = "failed"
+             output = result.get('results', 'Execution failed, no specific error captured.')
+             
+        test_result = TestResult(
+            test_case_id=test_case.id,
+            status=status,
+            output=output,
+            # execution_time=result.get('execution_time', 0) # Module doesn't provide this yet
+        )
+        db.session.add(test_result)
+        db.session.commit()
+        logger.info(f"Saved TestResult ID: {test_result.id} with status '{status}' for TestCase ID: {test_case.id}")
+
+        # Return the result from the module along with the saved DB record
         return jsonify({
-            "success": True,
-            "test_case": test_case.to_dict()
+            "success": result.get('success', False), # Reflect the actual execution success 
+            "test_result": test_result.to_dict(), # Include the saved result details
+            "message": "Test execution completed."
         })
-        
+
     except Exception as e:
-        logger.error(f"Error in get_test_case API: {e}")
+        logger.error(f"Error in execute_test_case API: {e}")
         logger.error(traceback.format_exc())
-        return jsonify({"success": False, "error": str(e), "message": "Failed to get test case"}), 500
+        # Attempt to save an error result to DB even if API call fails
+        try:
+            if 'test_case' in locals() and test_case:
+                error_result = TestResult(
+                    test_case_id=test_case.id,
+                    status="error",
+                    output=f"API Error during execution: {str(e)}\n{traceback.format_exc()}"
+                )
+                db.session.add(error_result)
+                db.session.commit()
+                logger.info(f"Saved error TestResult for TestCase ID: {test_case.id} due to API exception.")
+            else:
+                 logger.warning("Could not save error TestResult as test_case object was not available.")
+        except Exception as db_err:
+            logger.error(f"Failed to save error result to DB after API exception: {db_err}")
+            db.session.rollback() # Rollback the failed attempt to save error result
+            
+        return jsonify({"success": False, "error": str(e), "message": "Failed to execute test case"}), 500
+
+# Testing API - Improve Test Case (Not implemented with OpenRouter Module yet)
+@app.route('/api/testing/improve', methods=['POST'])
+def improve_test_case():
+    # This route relies on logic not present in the refactored TestingModule.
+    # Keep returning 501 Not Implemented.
+    logger.warning("'/api/testing/improve' endpoint called but is not implemented with the new modules.")
+    return jsonify({
+        "success": False, 
+        "error": "Not Implemented", 
+        "message": "This feature (improve test case) is not currently available."
+    }), 501
 
 # Get all scripts
 @app.route('/api/coding/scripts', methods=['GET'])
@@ -581,164 +888,33 @@ def get_script(script_id):
         logger.error(traceback.format_exc())
         return jsonify({"success": False, "error": str(e), "message": "Failed to get script"}), 500
 
-# Get script versions
-@app.route('/api/coding/scripts/<int:script_id>/versions', methods=['GET'])
-def get_script_versions(script_id):
+# Testing API - Get Test Cases
+@app.route('/api/testing/test-cases', methods=['GET'])
+def get_test_cases():
     try:
-        script = Script.query.get(script_id)
+        script_id = request.args.get('script_id')
         
+        if not script_id:
+            return jsonify({"success": False, "error": "Missing script_id parameter"}), 400
+            
+        # Check if script exists
+        script = Script.query.get(script_id)
         if not script:
             return jsonify({"success": False, "error": "Script not found"}), 404
             
-        versions = ScriptVersion.query.filter_by(script_id=script_id).order_by(ScriptVersion.version.desc()).all()
+        # Get test cases for the script
+        test_cases = TestCase.query.filter_by(script_id=script_id).order_by(TestCase.created_at.desc()).all()
         
         return jsonify({
             "success": True,
-            "script_id": script_id,
-            "versions": [version.to_dict() for version in versions]
+            "test_cases": [test_case.to_dict() for test_case in test_cases],
+            "script_id": script_id
         })
         
     except Exception as e:
-        logger.error(f"Error in get_script_versions API: {e}")
+        logger.error(f"Error in get_test_cases API: {e}")
         logger.error(traceback.format_exc())
-        return jsonify({"success": False, "error": str(e), "message": "Failed to get script versions"}), 500
-
-# Chat API - Send Message
-@app.route('/api/chat/send', methods=['POST'])
-def send_chat_message():
-    if not chat_module:
-         return jsonify({"success": False, "error": "Chat module not initialized."}), 500
-
-    try:
-        data = request.json
-        message = data.get('message')
-        session_id = session.get('chat_session_id') # Use Flask session ID
-
-        if not message:
-            return jsonify({"success": False, "error": "Missing message"}), 400
-        if not session_id:
-            # Should not happen if chat() route was hit first, but handle defensively
-            logger.warning("Chat session ID not found in Flask session for /api/chat/send")
-            return jsonify({"success": False, "error": "Chat session not found. Please refresh the chat page."}), 400
-            
-        # --- Database Interaction: Get/Create Session and History --- 
-        logger.debug(f"Processing chat message for session ID: {session_id}")
-        # Get or create DB session record linked to the Flask session ID
-        chat_db_session = ChatSession.query.filter_by(session_id=session_id).first()
-        if not chat_db_session:
-            logger.info(f"Creating new DB record for chat session: {session_id}")
-            chat_db_session = ChatSession(session_id=session_id)
-            db.session.add(chat_db_session)
-            # We need the ID, so commit here
-            db.session.commit() 
-            logger.info(f"Created ChatSession DB ID: {chat_db_session.id}")
-        else:
-             logger.debug(f"Found existing ChatSession DB ID: {chat_db_session.id}")
-
-        # Save user message to DB *before* calling the model
-        user_msg = ChatMessage(session_id=chat_db_session.id, role='user', content=message)
-        db.session.add(user_msg)
-        db.session.commit()
-        logger.debug(f"Saved user ChatMessage ID: {user_msg.id}")
-
-        # Get history from DB for context (make sure it's ordered correctly)
-        db_history = ChatMessage.query.filter_by(session_id=chat_db_session.id).order_by(ChatMessage.created_at.asc()).all()
-        # Format for the model: list of {'role': str, 'content': str}
-        history_for_model = [{'role': msg.role, 'content': msg.content} for msg in db_history]
-
-        # Call refactored chat method (non-streaming)
-        logger.debug(f"Calling chat_module.get_response for session ID: {session_id}")
-        result = chat_module.get_response(message, chat_history=history_for_model)
-
-        if not result.get('success'):
-            logger.error(f"Module Error in send_chat_message: {result.get('error')}")
-            # Optionally save an error message to history?
-            # error_msg = ChatMessage(session_id=chat_db_session.id, role='assistant', content=f"Error: {result.get('error')}")
-            # db.session.add(error_msg)
-            # db.session.commit()
-            return jsonify({"success": False, "error": result.get('error', 'Unknown chat error')}), 500
-
-        assistant_response = result.get('response')
-
-        # --- Database Interaction: Save Assistant Response --- 
-        logger.debug(f"Saving assistant response for session ID: {session_id}")
-        assistant_msg = ChatMessage(session_id=chat_db_session.id, role='assistant', content=assistant_response)
-        db.session.add(assistant_msg)
-        db.session.commit()
-        logger.debug(f"Saved assistant ChatMessage ID: {assistant_msg.id}")
-
-        return jsonify({
-            "success": True, 
-            "response": assistant_response,
-            "session_id": session_id # Return session ID used
-        })
-
-    except Exception as e:
-        logger.error(f"Error in send_chat_message API: {e}")
-        logger.error(traceback.format_exc())
-        db.session.rollback()
-        return jsonify({"success": False, "error": str(e), "message": "Failed to send message"}), 500
-
-# Chat API - Get History
-@app.route('/api/chat/history', methods=['GET'])
-def get_chat_history():
-    session_id = session.get('chat_session_id') # Get Flask session ID
-    if not session_id:
-        logger.warning("Chat session ID not found in Flask session for /api/chat/history")
-        return jsonify({"success": False, "error": "No active chat session found in your browser session."}), 400
-
-    # Find the corresponding ChatSession in the database
-    chat_db_session = ChatSession.query.filter_by(session_id=session_id).first()
-    if not chat_db_session:
-        logger.info(f"No chat history found in DB for session ID: {session_id}")
-        # It's not an error if there's no history yet, return empty list
-        return jsonify({"success": True, "messages": [], "session_id": session_id}), 200 
-
-    try:
-        logger.debug(f"Fetching chat history for DB session ID: {chat_db_session.id}")
-        # Fetch associated messages ordered by creation time
-        messages = ChatMessage.query.filter_by(session_id=chat_db_session.id).order_by(ChatMessage.created_at.asc()).all()
-        return jsonify({
-            "success": True,
-            "messages": [msg.to_dict() for msg in messages],
-            "session_id": session_id # Return the original Flask session ID
-        })
-    except Exception as e:
-        logger.error(f"Error fetching chat history for session {session_id} (DB ID: {chat_db_session.id}): {e}")
-        logger.error(traceback.format_exc())
-        return jsonify({"success": False, "error": str(e), "message": "Failed to get chat history"}), 500
-
-# Chat API - Clear History
-@app.route('/api/chat/clear', methods=['POST'])
-def clear_chat_history():
-    session_id = session.get('chat_session_id') # Get Flask session ID
-    if not session_id:
-        logger.warning("Chat session ID not found in Flask session for /api/chat/clear")
-        return jsonify({"success": False, "error": "No active chat session found in your browser session."}), 400
-
-    # Find the corresponding ChatSession in the database
-    chat_db_session = ChatSession.query.filter_by(session_id=session_id).first()
-    if not chat_db_session:
-        logger.info(f"No chat history to clear in DB for session ID: {session_id}")
-        # Nothing to clear, return success
-        return jsonify({"success": True, "message": "No history to clear"}), 200 
-
-    try:
-        logger.info(f"Clearing chat history for session ID: {session_id} (DB ID: {chat_db_session.id})")
-        # Delete associated messages
-        num_deleted = ChatMessage.query.filter_by(session_id=chat_db_session.id).delete()
-        # Optional: Delete the ChatSession row itself? 
-        # db.session.delete(chat_db_session) 
-        db.session.commit()
-        logger.info(f"Cleared {num_deleted} messages for chat session {session_id}")
-        # Optional: Remove from Flask session too? 
-        # session.pop('chat_session_id', None)
-        return jsonify({"success": True, "message": "Chat history cleared"})
-    except Exception as e:
-        logger.error(f"Error clearing chat history for session {session_id} (DB ID: {chat_db_session.id}): {e}")
-        logger.error(traceback.format_exc())
-        db.session.rollback() # Rollback in case of error
-        return jsonify({"success": False, "error": str(e), "message": "Failed to clear chat history"}), 500
+        return jsonify({"success": False, "error": str(e), "message": "Failed to get test cases"}), 500
 
 # API Status route (Updated for OpenRouter)
 @app.route('/api/status', methods=['GET'])
@@ -746,18 +922,20 @@ def api_status():
     """Simple endpoint to check if API is working and modules are initialized."""
     openrouter_configured = bool(app.config.get('OPENROUTER_API_KEY'))
     # Check if each module instance exists (was not None after init)
+    chat_module_ok = bool(chat_module)
+    fa_transcriber_module_ok = bool(fa_transcriber_module)
     coding_module_ok = bool(coding_module)
     testing_module_ok = bool(testing_module)
-    chat_module_ok = bool(chat_module)
-    modules_initialized = coding_module_ok and testing_module_ok and chat_module_ok
+    modules_initialized = chat_module_ok and fa_transcriber_module_ok and coding_module_ok and testing_module_ok
     
     status = {
         "api": "online",
         "openrouter_key_set": openrouter_configured,
         "modules_initialized": modules_initialized,
+        "chat_module_status": "initialized" if chat_module_ok else "failed",
+        "fa_transcriber_module_status": "initialized" if fa_transcriber_module_ok else "failed",
         "coding_module_status": "initialized" if coding_module_ok else "failed",
         "testing_module_status": "initialized" if testing_module_ok else "failed",
-        "chat_module_status": "initialized" if chat_module_ok else "failed",
         "environment": "production" if not app.config['DEBUG'] else "development"
     }
     
