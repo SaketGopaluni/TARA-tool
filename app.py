@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 import traceback
 # from functools import wraps # No longer needed for timed_response
 import html
+import difflib
 
 # Import refactored modules and database models
 from modules.chat import ChatModule
@@ -90,6 +91,31 @@ except Exception as e:
     coding_module = None
     testing_module = None
     chat_module = None
+
+# Helper function to generate HTML diff
+def generateDiffHtml(original, modified):
+    """Generate HTML diff between original and modified text"""
+    if original == modified:
+        return "<div class='bg-yellow-100 p-2 rounded'>No changes made - code is identical.</div>"
+    
+    diff = difflib.unified_diff(
+        original.splitlines(keepends=True),
+        modified.splitlines(keepends=True),
+        n=3
+    )
+    
+    html_diff = []
+    for line in diff:
+        if line.startswith('+'):
+            html_diff.append(f"<div class='bg-green-100 text-green-800'>{html.escape(line)}</div>")
+        elif line.startswith('-'):
+            html_diff.append(f"<div class='bg-red-100 text-red-800'>{html.escape(line)}</div>")
+        elif line.startswith('@@'):
+            html_diff.append(f"<div class='bg-blue-100 text-blue-800'>{html.escape(line)}</div>")
+        else:
+            html_diff.append(f"<div>{html.escape(line)}</div>")
+    
+    return f"<div class='font-mono text-sm whitespace-pre'>{''.join(html_diff)}</div>"
 
 # Remove old diff functions, use CodingModule.calculate_diff static method
 # def generate_diff_html(old_text, new_text): ...
@@ -236,7 +262,7 @@ def debug_script():
                     "analysis": analysis,
                     "explanation": analysis,  # Add this for frontend compatibility
                     "fixed_code": script_content, # Return original content if no changes
-                    "diff_html": f"<pre>{html.escape(script_content)}</pre><pre>{html.escape(script_content)}</pre>",  # Simple diff
+                    "diff_html": "<div class='bg-yellow-100 p-2 rounded'>No changes needed - script appears to be functioning correctly.</div>",
                     "script_id": script_id,
                     "new_version": None # No new version created
                 })
@@ -274,7 +300,7 @@ def debug_script():
             "analysis": analysis,
             "explanation": analysis,  # Add this for frontend compatibility
             "fixed_code": fixed_code,
-            "diff_html": f"<pre>{html.escape(script_content)}</pre><pre>{html.escape(fixed_code)}</pre>",  # Simple diff
+            "diff_html": generateDiffHtml(script_content, fixed_code),  # Better diff display
             "script_id": script_id if script else None,
             "new_version": version_dict # Include new version info if created
         })
@@ -314,9 +340,18 @@ def modify_script():
 
         logger.debug(f"Calling coding_module.modify_script")
         # Call refactored modify method (returns modified code string or error string)
-        modified_code = coding_module.modify_script(script_content, modification_request)
+        modify_result = coding_module.modify_script(script_content, modification_request)
+        
+        # Check if the result is a dictionary or just a string
+        if isinstance(modify_result, dict):
+            explanation = modify_result.get('explanation', f"Script modified according to request: {modification_request[:100]}...")
+            modified_code = modify_result.get('modified_code', '')
+        else:
+            # Backwards compatibility with older module versions that return just the code string
+            explanation = f"Script modified according to request: {modification_request[:100]}..."
+            modified_code = modify_result
 
-        if modified_code.startswith("Error modifying script:"):
+        if isinstance(modified_code, str) and modified_code.startswith("Error modifying script:"):
             logger.error(f"Module Error in modify_script: {modified_code}")
             return jsonify({"success": False, "error": modified_code}), 500
         
@@ -351,8 +386,8 @@ def modify_script():
         return jsonify({
             "success": True,
             "modified_code": modified_code,
-            "explanation": f"Script modified according to request: {modification_request[:100]}...",  # Add explanation
-            "diff_html": f"<pre>{html.escape(script_content)}</pre><pre>{html.escape(modified_code)}</pre>",  # Simple diff
+            "explanation": explanation,
+            "diff_html": generateDiffHtml(script_content, modified_code),  # Better diff display
             "script_id": script_id if script else None,
             "new_version": version_dict # Include new version info if created
         })
@@ -379,7 +414,7 @@ def diffcheck():
 
         logger.debug("Generating diff between two content versions.")
         # Use the static method from CodingModule
-        diff_html = CodingModule.calculate_diff(original_content, new_content)
+        diff_html = generateDiffHtml(original_content, new_content)
         
         return jsonify({
             "success": True, 
@@ -396,256 +431,70 @@ def diffcheck():
         return jsonify({"success": False, "error": str(e), "message": "Failed to generate diff"}), 500
 
 # Testing API - Generate Test Case
-@app.route('/api/testing/generate', methods=['POST', 'GET', 'OPTIONS'])  # Add OPTIONS for preflight and GET for testing
-@csrf.exempt  # Exempt this route from CSRF protection
+@app.route('/api/testing/generate', methods=['POST'])
+# @csrf.exempt
 def generate_test_case():
-    logger.info(f"Accessed /api/testing/generate route with method: {request.method}")
-    if request.method == 'OPTIONS':
-        # Handle preflight requests for CORS if needed
-        resp = app.make_default_options_response()
-        return resp
-        
     if not testing_module:
-         return jsonify({"success": False, "error": "Testing module not initialized."}), 500
-         
+        return jsonify({"success": False, "error": "Testing module not initialized. Check API key."}), 500
+    
     try:
         data = request.json
-        logger.info(f"Received data in generate_test_case: {data}")
         
+        # Get script ID and content from the request
         script_id = data.get('script_id')
-        script_content = data.get('script_content') # Allow direct content submission
-        language = data.get('language') # Allow language override
-        requirements = data.get('requirements', 'Generate standard unit tests.') # Optional requirements
-
-        # At least one of script_id or script_content must be provided
-        if not script_id and not script_content:
-            logger.error(f"Missing both script_id and script_content")
-            return jsonify({"success": False, "error": "Either script_id or script_content must be provided"}), 400
-
-        # If script_id is provided, try to fetch from database
-        script = None
+        script_content = data.get('script_content')
+        requirements = data.get('requirements', '')
+        
+        if not script_content:
+            return jsonify({"success": False, "error": "Missing script_content"}), 400
+        
+        # Call the testing module to generate a test case
+        try:
+            test_case = testing_module.generate_test_case(script_content, requirements)
+        except Exception as e:
+            logger.error(f"Error in testing module: {str(e)}")
+            return jsonify({"success": False, "error": f"Error generating test case: {str(e)}"}), 500
+        
+        # Save the test case to the database if a script ID was provided
         if script_id:
             script = Script.query.get(script_id)
-            if not script:
-                logger.error(f"Script not found for ID: {script_id}")
-                if not script_content:
-                    return jsonify({"success": False, "error": "Script not found"}), 404
-                else:
-                    logger.info(f"Script ID {script_id} not found, but proceeding with provided content")
-        
-        # Use script content from database if we found a script and no override was provided
-        if script and not script_content:
-            script_content = script.content
-            language = language or script.language
-        elif not language:  # If no language was provided or obtained from script
-            # Try to guess language from content or default to python
-            if script_content and "function" in script_content and ("{" in script_content or "=>" in script_content):
-                language = "javascript"
-            elif script_content and "#include" in script_content:
-                language = "cpp" if "class" in script_content else "c"
+            if script:
+                new_test_case = TestCase(
+                    script_id=script.id,
+                    title=f"Test for {script.title or 'Untitled Script'}",
+                    content=test_case,
+                    created_at=datetime.utcnow()
+                )
+                db.session.add(new_test_case)
+                db.session.commit()
+                
+                return jsonify({
+                    "success": True,
+                    "test_case": new_test_case.to_dict(),
+                    "message": "Test case generated and saved successfully."
+                })
             else:
-                language = "python"  # Default to Python
-
-        if not script_content:
-             logger.error(f"Missing script content for test generation")
-             return jsonify({"success": False, "error": "Script content missing"}), 400
-
-        logger.debug(f"Calling testing_module.generate_test_cases with language: {language}")
-        # Call refactored generate method (expects script content and language)
-        result = testing_module.generate_test_cases(script_content, language, requirements)
-
-        if not result.get('success'):
-            logger.error(f"Module Error in generate_test_case: {result.get('error')}")
-            return jsonify({"success": False, "error": result.get('error', 'Unknown error during test generation')}), 500
-
-        generated_tests = result.get('test_cases') # This is the generated code string
-
-        # --- Database Interaction --- 
-        # Only save to database if we have a script_id
-        if script:
-            logger.debug(f"Saving generated test case for script ID: {script.id}")
-            new_test_case = TestCase(
-                script_id=script.id,
-                title=f"Tests for {script.title[:50]}", # Truncate title if long
-                content=generated_tests,
-                language=language, # Store the language used for generation
-                requirements=requirements
-            )
-            db.session.add(new_test_case)
-            db.session.commit()
-            logger.info(f"Created new TestCase ID: {new_test_case.id} for Script ID: {script.id}")
-            
-            test_case_dict = new_test_case.to_dict()
-        else:
-            # If no script_id, create a temporary test case object but don't save to DB
-            logger.info("Created test case without saving to database (no script_id)")
-            test_case_dict = {
-                "id": None,
-                "script_id": None,
-                "title": "Generated Test Case",
-                "content": generated_tests,
-                "language": language,
-                "created_at": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat()
-            }
-
+                logger.warning(f"Script ID {script_id} not found, returning generated test case without saving")
+                
+        # If no script ID or script not found, return the test case without saving
         return jsonify({
-            "success": True, 
-            "test_case": test_case_dict # Return saved or temp test case data
-        }), 201
-
+            "success": True,
+            "test_case": {
+                "id": None,
+                "title": "Generated Test Case (Not Saved)",
+                "content": test_case,
+                "created_at": datetime.utcnow().isoformat()
+            },
+            "message": "Test case generated successfully (not saved to database)."
+        })
+        
     except Exception as e:
         logger.error(f"Error in generate_test_case API: {e}")
         logger.error(traceback.format_exc())
         db.session.rollback()
         return jsonify({"success": False, "error": str(e), "message": "Failed to generate test case"}), 500
 
-# Testing API - Execute Test Case
-@app.route('/api/testing/execute', methods=['POST'])
-def execute_test_case():
-    if not testing_module:
-         return jsonify({"success": False, "error": "Testing module not initialized."}), 500
-
-    try:
-        data = request.json
-        logger.info(f"Received data in execute_test_case: {data}")
-        
-        test_case_id = data.get('test_case_id')
-        # Allow direct content execution when no test_case_id is provided
-        script_content = data.get('script_content')
-        test_content = data.get('test_content')
-        language = data.get('language', 'python')  # Default to python
-
-        # Check if we have the necessary test case info
-        if not test_case_id and (not script_content or not test_content):
-            return jsonify({
-                "success": False, 
-                "error": "Either test_case_id or both script_content and test_content must be provided"
-            }), 400
-
-        # If test_case_id is provided, fetch content from database
-        if test_case_id:
-            test_case = TestCase.query.get(test_case_id)
-            if not test_case:
-                return jsonify({"success": False, "error": "Test Case not found"}), 404
-                
-            script = Script.query.get(test_case.script_id)
-            if not script:
-                return jsonify({"success": False, "error": "Associated Script not found"}), 404
-                
-            script_content = script.content
-            test_content = test_case.content
-            # Use language from test case or script as fallback
-            language = test_case.language if test_case.language else script.language
-        
-        # Final validation of content
-        if not script_content or not test_content:
-             return jsonify({"success": False, "error": "Missing content for script or test case."}), 400
-
-        logger.debug(f"Calling testing_module.execute_test with language: {language}")
-        # Call the execute_test method from the module
-        # This method handles temporary files and subprocess execution
-        # It returns a dict: {'success': bool, 'results': str, 'error': str (optional)} 
-        result = testing_module.execute_test(script_content, test_content, language)
-
-        # --- Database Interaction --- 
-        # Only save results to database if we have a test_case_id
-        test_result_dict = None
-        if test_case_id:
-            logger.debug(f"Saving test result for TestCase ID: {test_case_id}")
-            # Determine status based on success flag and presence of error key
-            if result.get('success'):
-                status = "passed"
-                output = result.get('results', 'Execution successful, no output captured.')
-            elif 'error' in result:
-                 status = "error"
-                 output = result.get('error', 'An unknown execution error occurred.')
-            else:
-                 status = "failed"
-                 output = result.get('results', 'Execution failed, no specific error captured.')
-                 
-            test_result = TestResult(
-                test_case_id=test_case_id,
-                status=status,
-                output=output,
-                # execution_time=result.get('execution_time', 0) # Module doesn't provide this yet
-            )
-            db.session.add(test_result)
-            db.session.commit()
-            logger.info(f"Saved TestResult ID: {test_result.id} with status '{status}' for TestCase ID: {test_case_id}")
-            
-            test_result_dict = test_result.to_dict()
-        else:
-            # If no test_case_id, create a temporary result object but don't save to DB
-            logger.info("Created test result without saving to database (no test_case_id)")
-            if result.get('success'):
-                status = "passed"
-                output = result.get('results', 'Execution successful, no output captured.')
-            elif 'error' in result:
-                status = "error"
-                output = result.get('error', 'An unknown execution error occurred.')
-            else:
-                status = "failed"
-                output = result.get('results', 'Execution failed, no specific error captured.')
-                
-            test_result_dict = {
-                "id": None,
-                "test_case_id": None,
-                "status": status,
-                "output": output,
-                "execution_time": result.get('execution_time', 0),
-                "created_at": datetime.utcnow().isoformat()
-            }
-
-        # Return the result from the module along with the saved DB record
-        return jsonify({
-            "success": result.get('success', False), # Reflect the actual execution success 
-            "test_result": test_result_dict, # Include the saved result details
-            "message": "Test execution completed."
-        })
-
-    except Exception as e:
-        logger.error(f"Error in execute_test_case API: {e}")
-        logger.error(traceback.format_exc())
-        # Attempt to save an error result to DB even if API call fails
-        try:
-            if 'test_case_id' in locals() and test_case_id:
-                error_result = TestResult(
-                    test_case_id=test_case_id,
-                    status="error",
-                    output=f"API Error during execution: {str(e)}\n{traceback.format_exc()}"
-                )
-                db.session.add(error_result)
-                db.session.commit()
-                logger.info(f"Saved error TestResult for TestCase ID: {test_case_id} due to API exception.")
-                
-                return jsonify({
-                    "success": False, 
-                    "error": str(e), 
-                    "test_result": error_result.to_dict(),
-                    "message": "Failed to execute test case"
-                }), 500
-            else:
-                 logger.warning("Could not save error TestResult as test_case_id was not available.")
-        except Exception as db_err:
-            logger.error(f"Failed to save error result to DB after API exception: {db_err}")
-            db.session.rollback() # Rollback the failed attempt to save error result
-            
-        return jsonify({"success": False, "error": str(e), "message": "Failed to execute test case"}), 500
-
-# Testing API - Improve Test Case (Not implemented with OpenRouter Module yet)
-@app.route('/api/testing/improve', methods=['POST'])
-def improve_test_case():
-    # This route relies on logic not present in the refactored TestingModule.
-    # Keep returning 501 Not Implemented.
-    logger.warning("'/api/testing/improve' endpoint called but is not implemented with the new modules.")
-    return jsonify({
-        "success": False, 
-        "error": "This endpoint is not yet implemented with the new OpenRouter modules.",
-        "message": "Feature not implemented"
-    }), 501
-
-# Add missing route for getting available test cases
+# Testing API - Get Test Cases
 @app.route('/api/testing/test-cases', methods=['GET'])
 def get_test_cases():
     try:
