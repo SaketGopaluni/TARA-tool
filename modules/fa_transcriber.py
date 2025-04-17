@@ -24,10 +24,8 @@ class FATranscriberModule:
             api_key=config['OPENROUTER_API_KEY'],
             http_client=httpx_client
         )
-        # Store the configured model but use a known vision-capable model by default
-        self.configured_model = config.get('OPENROUTER_MODEL', 'meta-llama/llama-4-maverick:free')
-        # Use a default model that is known to support vision
-        self.vision_model = "google/gemini-2.0-flash-thinking-exp:free"
+        # Only use the configured model
+        self.model = config.get('OPENROUTER_MODEL', 'meta-llama/llama-4-maverick:free')
         self.site_url = config.get('YOUR_SITE_URL')
         self.site_name = config.get('YOUR_SITE_NAME')
         self.extra_headers = {}
@@ -110,47 +108,53 @@ Do not include any text outside the JSON array. Use the exact column names shown
                 user_message
             ]
             
-            # Try first with the known vision-capable model
+            # API call to the model
             try:
-                logger.info(f"Calling OpenRouter with vision-capable model: {self.vision_model}")
+                logger.info(f"Calling OpenRouter with model: {self.model}")
                 completion = self.client.chat.completions.create(
-                    model=self.vision_model,
+                    model=self.model,
                     messages=messages,
                     temperature=0.3,
                     max_tokens=2500,
-                    extra_headers=self.extra_headers  # FIXED: Use extra_headers instead of headers
+                    extra_headers=self.extra_headers  # Using extra_headers instead of headers
                 )
-                logger.info(f"API Response received using {self.vision_model}.")
-            except Exception as vision_model_err:
-                logger.warning(f"Error with vision model: {str(vision_model_err)}. Trying configured model.")
-                # Fall back to the configured model
-                try:
-                    logger.info(f"Falling back to configured model: {self.configured_model}")
-                    completion = self.client.chat.completions.create(
-                        model=self.configured_model,
-                        messages=messages,
-                        temperature=0.3,
-                        max_tokens=2500,
-                        extra_headers=self.extra_headers  # FIXED: Use extra_headers instead of headers
-                    )
-                    logger.info(f"API Response received using {self.configured_model}.")
-                except Exception as configured_model_err:
-                    logger.error(f"Error with configured model: {str(configured_model_err)}")
-                    return {
-                        "success": False,
-                        "error": f"API call error with both models: {str(configured_model_err)}"
-                    }
+                logger.info(f"API Response received from {self.model}")
+            except Exception as api_err:
+                logger.error(f"Error calling API: {str(api_err)}")
+                return {
+                    "success": False,
+                    "error": f"API call error: {str(api_err)}"
+                }
+            
+            # Check for error in response
+            if hasattr(completion, 'error') and completion.error:
+                error_msg = "Unknown error"
+                error_code = None
+                
+                # Handle both dictionary and object format
+                if isinstance(completion.error, dict):
+                    error_msg = completion.error.get('message', 'Unknown error')
+                    error_code = completion.error.get('code')
+                elif hasattr(completion.error, 'message'):
+                    error_msg = completion.error.message
+                    error_code = getattr(completion.error, 'code', None)
+                    
+                logger.error(f"API returned error: {error_code} - {error_msg}")
+                return {
+                    "success": False,
+                    "error": f"API error: {error_msg}"
+                }
             
             # Safely check if completion has choices
             if not hasattr(completion, 'choices') or completion.choices is None:
                 logger.error("API returned response but 'choices' attribute is missing or None")
-                # Convert completion to string for debugging
                 logger.error(f"Raw API response: {str(completion)}")
                 return {
                     "success": False,
-                    "error": "API returned invalid response structure - 'choices' attribute missing"
+                    "error": "API returned invalid response structure. This may be due to the model's limitations with image processing."
                 }
             
+            # Check if we have choices
             choices_count = len(completion.choices)
             logger.info(f"Response has {choices_count} choices")
             
@@ -161,6 +165,7 @@ Do not include any text outside the JSON array. Use the exact column names shown
                     "error": "API returned empty choices array"
                 }
                 
+            # Get the first choice
             first_choice = completion.choices[0]
             if not hasattr(first_choice, 'message') or first_choice.message is None:
                 logger.error("API response missing message content")
@@ -169,7 +174,7 @@ Do not include any text outside the JSON array. Use the exact column names shown
                     "error": "API response missing message content"
                 }
                 
-            # Get the content safely
+            # Get the content
             message = first_choice.message
             if not hasattr(message, 'content') or message.content is None:
                 logger.error("API response has empty content")
